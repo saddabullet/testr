@@ -362,7 +362,6 @@ return function(VisualTab)
 -- ЧАСТЬ 2. ЛОГИКА: Offscreen ESP (arrows, labels, очистка), No Grass, No Leaves, Clouds, Ambient, Always Day, Remove Fog, Skybox
 -- + Object ESP оптимизированный, всё работает только если включено, throttle, кеш, Drawing не копятся
 ------------------------------------------------------------
---[[
 local Camera = workspace.CurrentCamera
 local RunService = game:GetService("RunService")
 local Lighting = game:GetService("Lighting")
@@ -2038,7 +2037,6 @@ getgenv().TridentLibrary:OnUnload(function()
     cleanupLabels(copterLabels)
     cleanupLabels(carLabels)
 end)
-]]
 ------------------------------------------------------------
 -- END visual.lua (FULL)
 ------------------------------------------------------------
