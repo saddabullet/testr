@@ -1006,15 +1006,21 @@ game:GetService("RunService").RenderStepped:Connect(function()
 end)
 -- конец chams, дальше идёт BULLET TRACE
 ------------------------------------------------------------
--- BULLET TRACE (Laser/Neon, двойная линия: белое внутри, цвет снаружи)
+-- BULLET TRACE (Laser/Neon, двойная линия: белое внутри, цвет снаружи) -- исправлено!
 ------------------------------------------------------------
 local bulletTraces = {}
 
 local function drawLaserLine(startPos, endPos, color, mode, life)
+    local Camera = workspace.CurrentCamera
+    local screenFrom, onScreenFrom = Camera:WorldToViewportPoint(startPos)
+    local screenTo, onScreenTo = Camera:WorldToViewportPoint(endPos)
+    -- Проверяем, что хотя бы одна точка на экране
+    if not (onScreenFrom or onScreenTo) then return end
+
     -- Glow (outline) линия (цвет выбран игроком)
     local glow = Drawing.new("Line")
-    glow.From = Camera:WorldToViewportPoint(startPos)
-    glow.To = Camera:WorldToViewportPoint(endPos)
+    glow.From = Vector2.new(screenFrom.X, screenFrom.Y)
+    glow.To = Vector2.new(screenTo.X, screenTo.Y)
     glow.Color = color
     glow.Thickness = (mode == "Neon") and 7 or 5.5
     glow.Transparency = (mode == "Neon") and 0.9 or 0.7
@@ -1022,8 +1028,8 @@ local function drawLaserLine(startPos, endPos, color, mode, life)
 
     -- Core (центр) линия (белая)
     local core = Drawing.new("Line")
-    core.From = Camera:WorldToViewportPoint(startPos)
-    core.To = Camera:WorldToViewportPoint(endPos)
+    core.From = Vector2.new(screenFrom.X, screenFrom.Y)
+    core.To = Vector2.new(screenTo.X, screenTo.Y)
     core.Color = Color3.new(1,1,1)
     core.Thickness = (mode == "Neon") and 3.5 or 2.7
     core.Transparency = 1
@@ -1053,7 +1059,7 @@ local function createBulletLaser(part)
             prevPos = currPos
         end
     end
-    conn = RunService.RenderStepped:Connect(drawTrace)
+    conn = game:GetService("RunService").RenderStepped:Connect(drawTrace)
     part.Destroying:Connect(function()
         if not finished then
             drawLaserLine(prevPos, part.Position, traceSettings.color, traceSettings.mode, traceSettings.lifetime)
@@ -1079,7 +1085,7 @@ local function createArrowLaser(part)
             prevPos = currPos
         end
     end
-    conn = RunService.RenderStepped:Connect(drawTrace)
+    conn = game:GetService("RunService").RenderStepped:Connect(drawTrace)
     part.Destroying:Connect(function()
         if not finished then
             drawLaserLine(prevPos, part.Position, traceSettings.color, traceSettings.mode, traceSettings.lifetime)
@@ -1113,7 +1119,7 @@ workspace.DescendantAdded:Connect(function(child)
         updateBulletTraces()
     end
 end)
-RunService.RenderStepped:Connect(function()
+game:GetService("RunService").RenderStepped:Connect(function()
     if traceSettings.enabled then
         updateBulletTraces()
     end
