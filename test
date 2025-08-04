@@ -826,7 +826,7 @@ local function objectEspUpdate()
 end
 
 RunService.RenderStepped:Connect(objectEspUpdate)
-]]
+
 ------------------------------------------------------------
 -- CHAMS (FPSArms/HandModel) ОПТИМИЗИРОВАННЫЙ
 ------------------------------------------------------------
@@ -2038,7 +2038,7 @@ getgenv().TridentLibrary:OnUnload(function()
     cleanupLabels(copterLabels)
     cleanupLabels(carLabels)
 end)
-
+]]
 ------------------------------------------------------------
 -- END visual.lua (FULL)
 ------------------------------------------------------------
