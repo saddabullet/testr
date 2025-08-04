@@ -1005,10 +1005,10 @@ game:GetService("RunService").RenderStepped:Connect(function()
 end)
 -- конец chams, дальше идёт BULLET TRACE
 ------------------------------------------------------------
--- === BULLET TRACE через Beam (Neon/Lazer/ForceField, плавный fade-out, без багов с кусками) ===
 local bulletTraces = {}
 local RunService = game:GetService("RunService")
 
+-- Плавная прозрачность для исчезновения линии
 local function fadeSequence(step)
     -- step [0..1]; 0 = видно, 1 = прозрачно
     return NumberSequence.new{
@@ -1019,6 +1019,7 @@ local function fadeSequence(step)
     }
 end
 
+-- Функция создания линии Bullet Trace
 local function createBeamLaser(startPos, endPos, color, mode, width, lifetime)
     -- Создание Attachments
     local partFrom = Instance.new("Part")
@@ -1044,10 +1045,9 @@ local function createBeamLaser(startPos, endPos, color, mode, width, lifetime)
 
     local beams = {}
 
-    -- Настроим размеры под Neon меньше, как Lazer
     local neonWidth = 0.12
     local lazerWidth = 0.12
-    local forceFieldWidth = 0.12
+    local forceFieldWidth = 0.21
 
     if mode == "Neon" then
         local beam = Instance.new("Beam")
@@ -1059,7 +1059,6 @@ local function createBeamLaser(startPos, endPos, color, mode, width, lifetime)
         beam.Width0 = neonWidth
         beam.Width1 = neonWidth
         beam.Transparency = fadeSequence(0)
-        beam.Material = Enum.Material.Neon
         beam.CurveSize0 = 0
         beam.CurveSize1 = 0
         beam.Parent = partFrom
@@ -1074,7 +1073,6 @@ local function createBeamLaser(startPos, endPos, color, mode, width, lifetime)
         beamGlow.Width0 = lazerWidth
         beamGlow.Width1 = lazerWidth
         beamGlow.Transparency = fadeSequence(0)
-        beamGlow.Material = Enum.Material.Plastic
         beamGlow.CurveSize0 = 0
         beamGlow.CurveSize1 = 0
         beamGlow.Parent = partFrom
@@ -1088,37 +1086,51 @@ local function createBeamLaser(startPos, endPos, color, mode, width, lifetime)
         beamCore.LightEmission = 1
         beamCore.Width0 = lazerWidth * 0.45
         beamCore.Width1 = lazerWidth * 0.45
-        beamCore.Transparency = fadeSequence(0)
-        beamCore.Material = Enum.Material.Plastic
+        beamCore.Transparency = NumberSequence.new(0.05)
         beamCore.CurveSize0 = 0
         beamCore.CurveSize1 = 0
         beamCore.Parent = partFrom
         table.insert(beams, beamCore)
     elseif mode == "ForceField" then
+        -- ForceField: волнистость, яркая синяя энергия, свечение
         local beamFF = Instance.new("Beam")
         beamFF.Attachment0 = attFrom
         beamFF.Attachment1 = attTo
         beamFF.FaceCamera = false
-        beamFF.Color = ColorSequence.new(color)
+        -- ColorSequence — плавный переход синего к голубому
+        beamFF.Color = ColorSequence.new{
+            ColorSequenceKeypoint.new(0, Color3.fromRGB(45, 184, 255)),
+            ColorSequenceKeypoint.new(0.3, Color3.fromRGB(80, 255, 255)),
+            ColorSequenceKeypoint.new(0.7, Color3.fromRGB(85, 112, 255)),
+            ColorSequenceKeypoint.new(1, Color3.fromRGB(45, 184, 255)),
+        }
         beamFF.LightEmission = 0.9
         beamFF.Width0 = forceFieldWidth
         beamFF.Width1 = forceFieldWidth
         beamFF.Transparency = fadeSequence(0)
-        beamFF.Material = Enum.Material.ForceField
-        beamFF.CurveSize0 = 0
-        beamFF.CurveSize1 = 0
+        -- Волнистость, чтобы выглядело энергично
+        beamFF.CurveSize0 = math.random(-1,1) * 0.7
+        beamFF.CurveSize1 = math.random(-1,1) * 0.7
+        beamFF.Texture = "rbxassetid://446111271" -- энергичная волна, можно менять на другой
+        beamFF.TextureMode = Enum.TextureMode.Wrap
+        beamFF.TextureLength = 3
+        beamFF.TextureSpeed = 4
         beamFF.Parent = partFrom
         table.insert(beams, beamFF)
     end
 
-    -- Плавный fade-out
+    -- Плавный fade-out (только прозрачность)
     local fadeSteps = 30
     local fadeTime = lifetime or 0.5
     for i = 1, fadeSteps do
         task.delay((fadeTime/fadeSteps)*i, function()
             local t = i/fadeSteps
             for _,beam in ipairs(beams) do
-                beam.Transparency = fadeSequence(t)
+                if mode == "Neon" or (mode == "Lazer" and beam.Color.Keypoints[1].Value ~= Color3.new(1,1,1)) or mode == "ForceField" then
+                    beam.Transparency = fadeSequence(t)
+                elseif mode == "Lazer" and beam.Color.Keypoints[1].Value == Color3.new(1,1,1) then
+                    beam.Transparency = NumberSequence.new(0.05 + 0.95*t)
+                end
             end
         end)
     end
@@ -1130,6 +1142,7 @@ local function createBeamLaser(startPos, endPos, color, mode, width, lifetime)
     end)
 end
 
+-- Bullet: след для пули
 local function createBulletBeam(part)
     local prevPos = part.Position
     local conn
@@ -1142,20 +1155,29 @@ local function createBulletBeam(part)
         end
         local currPos = part.Position
         if (currPos - prevPos).Magnitude > 0.01 then
-            createBeamLaser(prevPos, currPos, traceSettings.color, traceSettings.mode, 0.12, traceSettings.lifetime)
+            local mode = _G.traceSettings and _G.traceSettings.mode or "Lazer"
+            local color = _G.traceSettings and _G.traceSettings.color or Color3.new(0,0.4,1)
+            local lifetime = _G.traceSettings and _G.traceSettings.lifetime or 0.5
+            local width = (mode == "Neon") and 0.12 or (mode == "Lazer") and 0.12 or 0.21
+            createBeamLaser(prevPos, currPos, color, mode, width, lifetime)
             prevPos = currPos
         end
     end
     conn = RunService.RenderStepped:Connect(drawTrace)
     part.Destroying:Connect(function()
         if not finished then
-            createBeamLaser(prevPos, part.Position, traceSettings.color, traceSettings.mode, 0.12, traceSettings.lifetime)
+            local mode = _G.traceSettings and _G.traceSettings.mode or "Lazer"
+            local color = _G.traceSettings and _G.traceSettings.color or Color3.new(0,0.4,1)
+            local lifetime = _G.traceSettings and _G.traceSettings.lifetime or 0.5
+            local width = (mode == "Neon") and 0.12 or (mode == "Lazer") and 0.12 or 0.21
+            createBeamLaser(prevPos, part.Position, color, mode, width, lifetime)
             finished = true
             if conn then conn:Disconnect() end
         end
     end)
 end
 
+-- Arrow: след для стрелы
 local function createArrowBeam(part)
     local prevPos = part.Position
     local conn
@@ -1168,30 +1190,39 @@ local function createArrowBeam(part)
         end
         local currPos = part.Position
         if (currPos - prevPos).Magnitude > 0.01 then
-            createBeamLaser(prevPos, currPos, traceSettings.color, traceSettings.mode, 0.12, traceSettings.lifetime)
+            local mode = _G.traceSettings and _G.traceSettings.mode or "Lazer"
+            local color = _G.traceSettings and _G.traceSettings.color or Color3.new(0,0.4,1)
+            local lifetime = _G.traceSettings and _G.traceSettings.lifetime or 0.5
+            local width = (mode == "Neon") and 0.12 or (mode == "Lazer") and 0.12 or 0.21
+            createBeamLaser(prevPos, currPos, color, mode, width, lifetime)
             prevPos = currPos
         end
     end
     conn = RunService.RenderStepped:Connect(drawTrace)
     part.Destroying:Connect(function()
         if not finished then
-            createBeamLaser(prevPos, part.Position, traceSettings.color, traceSettings.mode, 0.12, traceSettings.lifetime)
+            local mode = _G.traceSettings and _G.traceSettings.mode or "Lazer"
+            local color = _G.traceSettings and _G.traceSettings.color or Color3.new(0,0.4,1)
+            local lifetime = _G.traceSettings and _G.traceSettings.lifetime or 0.5
+            local width = (mode == "Neon") and 0.12 or (mode == "Lazer") and 0.12 or 0.21
+            createBeamLaser(prevPos, part.Position, color, mode, width, lifetime)
             finished = true
             if conn then conn:Disconnect() end
         end
     end)
 end
 
+-- Обработка новых объектов в игре
 local function updateBulletTraces()
     local ignore = workspace:FindFirstChild("Const") and workspace.Const:FindFirstChild("Ignore")
     if not ignore then return end
     for _, obj in ipairs(ignore:GetChildren()) do
-        if obj.Name == "Arrow" and traceSettings.enabled then
+        if obj.Name == "Arrow" and (_G.traceSettings and _G.traceSettings.enabled) then
             if not bulletTraces[obj] then
                 bulletTraces[obj] = true
                 createArrowBeam(obj)
             end
-        elseif obj.Name == "Bullet" and traceSettings.enabled then
+        elseif obj.Name == "Bullet" and (_G.traceSettings and _G.traceSettings.enabled) then
             if not bulletTraces[obj] then
                 bulletTraces[obj] = true
                 createBulletBeam(obj)
@@ -1201,13 +1232,13 @@ local function updateBulletTraces()
 end
 
 workspace.DescendantAdded:Connect(function(child)
-    if (child.Name == "Arrow" or child.Name == "Bullet") and traceSettings.enabled then
+    if (child.Name == "Arrow" or child.Name == "Bullet") and (_G.traceSettings and _G.traceSettings.enabled) then
         task.wait(0.03)
         updateBulletTraces()
     end
 end)
 RunService.RenderStepped:Connect(function()
-    if traceSettings.enabled then
+    if _G.traceSettings and _G.traceSettings.enabled then
         updateBulletTraces()
     end
 end)
