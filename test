@@ -360,9 +360,9 @@ return function(VisualTab)
     })
 ------------------------------------------------------------
 -- ЧАСТЬ 2. ЛОГИКА: Offscreen ESP (arrows, labels, очистка), No Grass, No Leaves, Clouds, Ambient, Always Day, Remove Fog, Skybox
+-- ОПТИМИЗИРОВАНО: если все выключено, НЕ вызываются тяжелые функции, throttle на обновление, Drawing создаются один раз
 ------------------------------------------------------------
 
--- === Переменные сервисов ===
 local Camera = workspace.CurrentCamera
 local RunService = game:GetService("RunService")
 local Lighting = game:GetService("Lighting")
@@ -372,16 +372,17 @@ local LocalPlayer = Players.LocalPlayer
 -- === Кэш стрелок и текстов для offscreen
 local offscreenArrows, offscreenOutlines, offscreenLabels = {}, {}, {}
 
--- link to global PlayerTable from visual ESP
 local PlayerTable = nil
-for _, v in pairs(getgc(true)) do
-    if typeof(v) == "function" and islclosure(v) then
-        local info = debug.getinfo(v)
-        if info and tostring(info.name) == "updatePlayers" then
-            local ups = debug.getupvalues(v)
-            if type(ups[1]) == "table" and next(ups[1]) then
-                PlayerTable = ups[1]
-                break
+do
+    for _, v in pairs(getgc(true)) do
+        if typeof(v) == "function" and islclosure(v) then
+            local info = debug.getinfo(v)
+            if info and tostring(info.name) == "updatePlayers" then
+                local ups = debug.getupvalues(v)
+                if type(ups[1]) == "table" and next(ups[1]) then
+                    PlayerTable = ups[1]
+                    break
+                end
             end
         end
     end
@@ -478,14 +479,27 @@ local function getOffscreenTargets()
     return result
 end
 
+local function clearOffscreenDrawings()
+    for i, obj in pairs(offscreenArrows) do if obj then obj.Visible = false end end
+    for i, obj in pairs(offscreenOutlines) do if obj then obj.Visible = false end end
+    for i, obj in pairs(offscreenLabels) do if obj then obj.Visible = false end end
+end
+
+local lastOffscreenUpdate = 0
 RunService.RenderStepped:Connect(function()
-    if not offscreenSettings.enabled or not offscreenSettings.arrow then
-        for i, obj in pairs(offscreenArrows) do if obj then obj.Visible = false end end
-        for i, obj in pairs(offscreenOutlines) do if obj then obj.Visible = false end end
-        for i, obj in pairs(offscreenLabels) do if obj then obj.Visible = false end end
+    if not offscreenSettings.enabled then
+        clearOffscreenDrawings()
         return
     end
-
+    -- throttle
+    if tick() - lastOffscreenUpdate < 0.04 then
+        return
+    end
+    lastOffscreenUpdate = tick()
+    if not offscreenSettings.arrow then
+        clearOffscreenDrawings()
+        return
+    end
     local targets = getOffscreenTargets()
     for i = #targets + 1, #offscreenArrows do
         if offscreenArrows[i] then offscreenArrows[i].Visible = false end
@@ -558,7 +572,7 @@ RunService.RenderStepped:Connect(function()
             if not offscreenLabels[i] then
                 local label = Drawing.new("Text")
                 label.Outline = true
-                label.OutlineColor = outlineColor
+                label.OutlineColor = Color3.fromRGB(0,0,0)
                 label.Center = true
                 offscreenLabels[i] = label
             end
@@ -575,9 +589,9 @@ RunService.RenderStepped:Connect(function()
 end)
 ------------------------------------------------------------
 -- WORLD VISUALS LOGIC (No Grass, No Leaves, Clouds, Ambient, Always Day, Remove Fog, Skybox)
+-- ОПТИМИЗИРОВАНО: ничего не вызывается если всё выключено, throttle на удаление, подписки только по включению
 ------------------------------------------------------------
 
--- No Grass
 local terrain = nil
 local function ensureTerrain()
     terrain = workspace:FindFirstChildOfClass("Terrain")
@@ -593,7 +607,6 @@ local function setGrassEnabled(enabled)
     end
 end
 
--- No Leaves
 local leavesRemoved = {}
 local function removeLeaves()
     for _, obj in ipairs(workspace:GetDescendants()) do
@@ -620,108 +633,102 @@ local function leavesWatcher()
     end
 end
 
--- Clouds
 local cloudsObject, oldCloudsProps = nil, {}
 local function setClouds(enabled, color)
+    if not enabled then
+        if cloudsObject then cloudsObject.Enabled = false end
+        return
+    end
     ensureTerrain()
     if not cloudsObject then
         cloudsObject = terrain:FindFirstChildOfClass("Clouds")
     end
-    if enabled then
-        if not cloudsObject then
-            cloudsObject = Instance.new("Clouds")
-            cloudsObject.Parent = terrain
-        end
-        if not oldCloudsProps.color then
-            oldCloudsProps.color = cloudsObject.Color
-        end
-        cloudsObject.Enabled = true
-        cloudsObject.Color = color or worldVisuals.cloudsColor
-    else
-        if cloudsObject then
-            cloudsObject.Enabled = false
-        end
+    if not cloudsObject then
+        cloudsObject = Instance.new("Clouds")
+        cloudsObject.Parent = terrain
     end
+    if not oldCloudsProps.color then
+        oldCloudsProps.color = cloudsObject.Color
+    end
+    cloudsObject.Enabled = true
+    cloudsObject.Color = color or worldVisuals.cloudsColor
 end
 
--- Ambient logic (точно как в visual esp)
 local oldAmbient, oldBrightness, oldOutdoorAmbient, ambientApplyConn = nil, nil, nil, nil
 local function setAmbient(enabled, color)
-    if enabled then
-        if not oldAmbient then oldAmbient = Lighting.Ambient end
-        if not oldBrightness then oldBrightness = Lighting.Brightness end
-        if not oldOutdoorAmbient then oldOutdoorAmbient = Lighting.OutdoorAmbient end
-        Lighting.Ambient = color or worldVisuals.ambient
-        Lighting.Brightness = 3
-        Lighting.OutdoorAmbient = color or worldVisuals.ambient
-        if ambientApplyConn then ambientApplyConn:Disconnect() end
-        ambientApplyConn = Lighting.Changed:Connect(function(prop)
-            if worldVisuals.ambientEnabled and (prop == "Ambient" or prop == "Brightness" or prop == "OutdoorAmbient") then
-                Lighting.Ambient = worldVisuals.ambient
-                Lighting.Brightness = 3
-                Lighting.OutdoorAmbient = worldVisuals.ambient
-            end
-        end)
-    else
+    if not enabled then
         if ambientApplyConn then ambientApplyConn:Disconnect() end
         ambientApplyConn = nil
         if oldAmbient then Lighting.Ambient = oldAmbient end
         if oldBrightness then Lighting.Brightness = oldBrightness end
         if oldOutdoorAmbient then Lighting.OutdoorAmbient = oldOutdoorAmbient end
         oldAmbient, oldBrightness, oldOutdoorAmbient = nil, nil, nil
+        return
     end
+    if not oldAmbient then oldAmbient = Lighting.Ambient end
+    if not oldBrightness then oldBrightness = Lighting.Brightness end
+    if not oldOutdoorAmbient then oldOutdoorAmbient = Lighting.OutdoorAmbient end
+    Lighting.Ambient = color or worldVisuals.ambient
+    Lighting.Brightness = 3
+    Lighting.OutdoorAmbient = color or worldVisuals.ambient
+    if ambientApplyConn then ambientApplyConn:Disconnect() end
+    ambientApplyConn = Lighting.Changed:Connect(function(prop)
+        if worldVisuals.ambientEnabled and (prop == "Ambient" or prop == "Brightness" or prop == "OutdoorAmbient") then
+            Lighting.Ambient = worldVisuals.ambient
+            Lighting.Brightness = 3
+            Lighting.OutdoorAmbient = worldVisuals.ambient
+        end
+    end)
 end
--- Always Day
+
 local oldTime, alwaysDayConn = nil, nil
 local function setAlwaysDay(enabled)
-    if enabled then
-        if not oldTime then oldTime = Lighting.ClockTime end
-        Lighting.ClockTime = 6
-        if alwaysDayConn then alwaysDayConn:Disconnect() end
-        alwaysDayConn = Lighting:GetPropertyChangedSignal("ClockTime"):Connect(function()
-            if worldVisuals.alwaysDay and Lighting.ClockTime ~= 6 then
-                Lighting.ClockTime = 6
-            end
-        end)
-        setAmbient(worldVisuals.ambientEnabled, worldVisuals.ambient)
-    else
+    if not enabled then
         if alwaysDayConn then alwaysDayConn:Disconnect() end
         alwaysDayConn = nil
         if oldTime then Lighting.ClockTime = oldTime end
+        return
     end
+    if not oldTime then oldTime = Lighting.ClockTime end
+    Lighting.ClockTime = 6
+    if alwaysDayConn then alwaysDayConn:Disconnect() end
+    alwaysDayConn = Lighting:GetPropertyChangedSignal("ClockTime"):Connect(function()
+        if worldVisuals.alwaysDay and Lighting.ClockTime ~= 6 then
+            Lighting.ClockTime = 6
+        end
+    end)
+    setAmbient(worldVisuals.ambientEnabled, worldVisuals.ambient)
 end
 
--- Remove Fog
 local oldFogProps, fogApplyConn = {}, nil
 local function setRemoveFog(enabled)
-    if enabled then
-        if not oldFogProps.start then
-            oldFogProps.start = Lighting.FogStart
-            oldFogProps.endp = Lighting.FogEnd
-            oldFogProps.color = Lighting.FogColor
-        end
-        Lighting.FogStart = 1000000
-        Lighting.FogEnd = 1000000
-        Lighting.FogColor = Color3.new(1,1,1)
-        if fogApplyConn then fogApplyConn:Disconnect() end
-        fogApplyConn = Lighting.Changed:Connect(function(prop)
-            if worldVisuals.removeFog and (prop == "FogStart" or prop == "FogEnd" or prop == "FogColor") then
-                Lighting.FogStart = 1000000
-                Lighting.FogEnd = 1000000
-                Lighting.FogColor = Color3.new(1,1,1)
-            end
-        end)
-    else
+    if not enabled then
         if fogApplyConn then fogApplyConn:Disconnect() end
         fogApplyConn = nil
         if oldFogProps.start then Lighting.FogStart = oldFogProps.start end
         if oldFogProps.endp then Lighting.FogEnd = oldFogProps.endp end
         if oldFogProps.color then Lighting.FogColor = oldFogProps.color end
         oldFogProps = {}
+        return
     end
+    if not oldFogProps.start then
+        oldFogProps.start = Lighting.FogStart
+        oldFogProps.endp = Lighting.FogEnd
+        oldFogProps.color = Lighting.FogColor
+    end
+    Lighting.FogStart = 1000000
+    Lighting.FogEnd = 1000000
+    Lighting.FogColor = Color3.new(1,1,1)
+    if fogApplyConn then fogApplyConn:Disconnect() end
+    fogApplyConn = Lighting.Changed:Connect(function(prop)
+        if worldVisuals.removeFog and (prop == "FogStart" or prop == "FogEnd" or prop == "FogColor") then
+            Lighting.FogStart = 1000000
+            Lighting.FogEnd = 1000000
+            Lighting.FogColor = Color3.new(1,1,1)
+        end
+    end)
 end
 
--- Skybox
 local function setSkybox(name)
     for _,v in pairs(Lighting:GetChildren()) do
         if v:IsA("Sky") then v:Destroy() end
@@ -735,8 +742,6 @@ local function setSkybox(name)
     end
 end
 
-
--- ЧЕКБОКСЫ: только boolean
 grassToggle:SetValue(worldVisuals.noGrass)
 grassToggle:OnChanged(function(val)
     worldVisuals.noGrass = val
@@ -758,7 +763,6 @@ end)
 ambientToggle:SetValue(worldVisuals.ambientEnabled)
 ambientToggle:OnChanged(function(val)
     worldVisuals.ambientEnabled = val
-    -- ВАЖНО: только Color3!
     if typeof(worldVisuals.ambient) ~= "Color3" then
         worldVisuals.ambient = Color3.fromRGB(120,120,120)
     end
@@ -786,7 +790,6 @@ end)
 
 ambientColorPicker:OnChanged(function(val)
     worldVisuals.ambient = val
-    -- ВАЖНО: только Color3!
     if typeof(val) ~= "Color3" then
         worldVisuals.ambient = Color3.fromRGB(120,120,120)
     end
