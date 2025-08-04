@@ -1006,15 +1006,15 @@ game:GetService("RunService").RenderStepped:Connect(function()
 end)
 -- конец chams, дальше идёт BULLET TRACE
 ------------------------------------------------------------
--- BULLET TRACE через Beam (tail fade-out без кусков, плавно, Neon/Lazer)
+-- BULLET TRACE через Beam (tail fade-out без кусков, плавно, Neon/Lazer, фикс лимита кейпоинтов)
 ------------------------------------------------------------
 local bulletTraces = {}
 local RunService = game:GetService("RunService")
 
--- Генерация NumberSequence: fade-out с 65% до конца, много кейпоинтов
+-- Генерация NumberSequence: fade-out с 65% до конца, не больше 16 кейпоинтов!
 local function makeTailFadeSequence(fade)
     local points = {}
-    local numKeypoints = 25
+    local numKeypoints = 16 -- безопасный лимит!
     for i = 0, numKeypoints do
         local t = i / numKeypoints
         local value
