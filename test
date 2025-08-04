@@ -1006,125 +1006,97 @@ game:GetService("RunService").RenderStepped:Connect(function()
 end)
 -- конец chams, дальше идёт BULLET TRACE
 ------------------------------------------------------------
--- BULLET TRACE (Объёмный Laser/Neon, Fade-out от начала к концу, без багов)
+-- BULLET TRACE через Trail (3D Neon/Lazer, Fade-out, Bullet+Arrow)
 ------------------------------------------------------------
 local bulletTraces = {}
 local RunService = game:GetService("RunService")
 
--- Сколько Beam для объёмного эффекта
-local VOLUME_BEAMS = 8
+-- trail settings
+local function createTrailLaser(startPos, endPos, color, width, lifetime, mode)
+    -- Создание точек
+    local partFrom = Instance.new("Part")
+    partFrom.Anchored = true
+    partFrom.CanCollide = false
+    partFrom.Transparency = 1
+    partFrom.Size = Vector3.new(0.1, 0.1, 0.1)
+    partFrom.Position = startPos
+    partFrom.Parent = workspace
 
--- Вращение точки вокруг оси
-local function rotateAroundAxis(center, dir, radius, angle)
-    local up = Vector3.new(0,1,0)
-    if math.abs(dir:Dot(up)) > 0.99 then up = Vector3.new(1,0,0) end
-    local right = dir:Cross(up).Unit
-    local upVec = right:Cross(dir).Unit
-    local x = math.cos(angle) * right * radius
-    local y = math.sin(angle) * upVec * radius
-    return center + x + y
-end
+    local partTo = Instance.new("Part")
+    partTo.Anchored = true
+    partTo.CanCollide = false
+    partTo.Transparency = 1
+    partTo.Size = Vector3.new(0.1, 0.1, 0.1)
+    partTo.Position = endPos
+    partTo.Parent = workspace
 
-local function createVolumetricBeam(startPos, endPos, color, mode, width, life)
-    local dir = (endPos - startPos).Unit
-    local beams = {}
+    local att0 = Instance.new("Attachment", partFrom)
+    local att1 = Instance.new("Attachment", partTo)
 
-    -- Главный Beam (центр)
-    local function makeBeam(from, to, clr, w, emission, transparency)
-        local partFrom = Instance.new("Part")
-        partFrom.Anchored = true
-        partFrom.CanCollide = false
-        partFrom.Transparency = 1
-        partFrom.Size = Vector3.new(0.1,0.1,0.1)
-        partFrom.Position = from
-        partFrom.Parent = workspace
-
-        local partTo = Instance.new("Part")
-        partTo.Anchored = true
-        partTo.CanCollide = false
-        partTo.Transparency = 1
-        partTo.Size = Vector3.new(0.1,0.1,0.1)
-        partTo.Position = to
-        partTo.Parent = workspace
-
-        local attFrom = Instance.new("Attachment")
-        attFrom.Parent = partFrom
-        local attTo = Instance.new("Attachment")
-        attTo.Parent = partTo
-
-        local beam = Instance.new("Beam")
-        beam.Attachment0 = attFrom
-        beam.Attachment1 = attTo
-        beam.FaceCamera = false
-        beam.LightEmission = emission
-        beam.Width0 = w
-        beam.Width1 = w
-        beam.Color = ColorSequence.new(clr)
-        beam.Transparency = transparency or NumberSequence.new(0)
-        beam.CurveSize0 = 0
-        beam.CurveSize1 = 0
-        beam.Parent = partFrom
-
-        return {beam=beam, att0=attFrom, att1=attTo, part0=partFrom, part1=partTo}
-    end
-
-    -- Основная ось
-    local transparency = NumberSequence.new{
-        NumberSequenceKeypoint.new(0, 0),
-        NumberSequenceKeypoint.new(0.9, 0.1),
-        NumberSequenceKeypoint.new(1, 1)
-    }
+    -- Trail Neon (только цвет)
     if mode == "Neon" then
-        table.insert(beams, makeBeam(startPos, endPos, color, width, 1, transparency))
-    elseif mode == "Lazer" then
-        table.insert(beams, makeBeam(startPos, endPos, color, width, 0.7, transparency))
-        table.insert(beams, makeBeam(startPos, endPos, Color3.new(1,1,1), width*0.45, 1, NumberSequence.new(0.05)))
+        local trail = Instance.new("Trail")
+        trail.Attachment0 = att0
+        trail.Attachment1 = att1
+        trail.Color = ColorSequence.new(color)
+        trail.Transparency = NumberSequence.new{
+            NumberSequenceKeypoint.new(0, 0),
+            NumberSequenceKeypoint.new(0.7, 0.15),
+            NumberSequenceKeypoint.new(1, 1)
+        }
+        trail.Lifetime = lifetime or 0.5
+        trail.MinLength = 0
+        trail.MaxLength = (startPos - endPos).Magnitude
+        trail.FaceCamera = false
+        trail.LightEmission = 1
+        trail.WidthScale = NumberSequence.new(width)
+        trail.Parent = partFrom
     end
 
-    -- Вспомогательные Beam для объёма
-    for i = 1,VOLUME_BEAMS do
-        local angle = (2*math.pi/VOLUME_BEAMS)*i
-        local from = rotateAroundAxis(startPos, dir, width*0.4, angle)
-        local to = rotateAroundAxis(endPos, dir, width*0.4, angle)
-        if mode == "Neon" then
-            table.insert(beams, makeBeam(from, to, color, width*0.25, 1, transparency))
-        elseif mode == "Lazer" then
-            table.insert(beams, makeBeam(from, to, color, width*0.17, 0.7, transparency))
-            table.insert(beams, makeBeam(from, to, Color3.new(1,1,1), width*0.09, 1, NumberSequence.new(0.05)))
-        end
+    -- Trail Lazer (цвет + белый core)
+    if mode == "Lazer" then
+        -- Цветной внешний трейс
+        local trailGlow = Instance.new("Trail")
+        trailGlow.Attachment0 = att0
+        trailGlow.Attachment1 = att1
+        trailGlow.Color = ColorSequence.new(color)
+        trailGlow.Transparency = NumberSequence.new{
+            NumberSequenceKeypoint.new(0, 0),
+            NumberSequenceKeypoint.new(0.7, 0.15),
+            NumberSequenceKeypoint.new(1, 1)
+        }
+        trailGlow.Lifetime = lifetime or 0.5
+        trailGlow.MinLength = 0
+        trailGlow.MaxLength = (startPos - endPos).Magnitude
+        trailGlow.FaceCamera = false
+        trailGlow.LightEmission = 0.7
+        trailGlow.WidthScale = NumberSequence.new(width)
+        trailGlow.Parent = partFrom
+
+        -- Белый центр (core)
+        local trailCore = Instance.new("Trail")
+        trailCore.Attachment0 = att0
+        trailCore.Attachment1 = att1
+        trailCore.Color = ColorSequence.new(Color3.new(1,1,1))
+        trailCore.Transparency = NumberSequence.new(0.05)
+        trailCore.Lifetime = lifetime or 0.5
+        trailCore.MinLength = 0
+        trailCore.MaxLength = (startPos - endPos).Magnitude
+        trailCore.FaceCamera = false
+        trailCore.LightEmission = 1
+        trailCore.WidthScale = NumberSequence.new(width * 0.45)
+        trailCore.Parent = partFrom
     end
 
-    -- Fade-out от начала к концу: Attachment0 двигается к Attachment1, transparency увеличивается
-    local fadeSteps = 30
-    local fadeTime = life or 0.5
-    for step = 1,fadeSteps do
-        task.delay((fadeTime/fadeSteps)*step, function()
-            local alpha = step/fadeSteps
-            for _,b in ipairs(beams) do
-                -- Двигаем точку начала к концу
-                b.att0.WorldPosition = startPos:Lerp(endPos, alpha)
-                -- Меняем transparency: начало видно, конец прозрачное
-                if b.beam.Color.Keypoints[1].Value == Color3.new(1,1,1) then
-                    b.beam.Transparency = NumberSequence.new(0.05 + 0.95*alpha)
-                else
-                    b.beam.Transparency = NumberSequence.new{
-                        NumberSequenceKeypoint.new(0, 0+alpha*0.9),
-                        NumberSequenceKeypoint.new(1, 1)
-                    }
-                end
-            end
-        end)
-    end
-
-    task.delay(fadeTime+0.05, function()
-        for _,b in ipairs(beams) do
-            if b.part0 then b.part0:Destroy() end
-            if b.part1 then b.part1:Destroy() end
-        end
+    -- Удаление частей после исчезновения
+    task.delay((lifetime or 0.5) + 0.1, function()
+        if partFrom then partFrom:Destroy() end
+        if partTo then partTo:Destroy() end
     end)
 end
 
-local function createBulletBeamVolumetric(part)
+-- Bullet
+local function createBulletTrail(part)
     local prevPos = part.Position
     local conn
     local finished = false
@@ -1137,7 +1109,7 @@ local function createBulletBeamVolumetric(part)
         local currPos = part.Position
         if (currPos - prevPos).Magnitude > 0.01 then
             local width = (traceSettings.mode == "Neon") and 0.18 or 0.12
-            createVolumetricBeam(prevPos, currPos, traceSettings.color, traceSettings.mode, width, traceSettings.lifetime)
+            createTrailLaser(prevPos, currPos, traceSettings.color, width, traceSettings.lifetime, traceSettings.mode)
             prevPos = currPos
         end
     end
@@ -1145,14 +1117,15 @@ local function createBulletBeamVolumetric(part)
     part.Destroying:Connect(function()
         if not finished then
             local width = (traceSettings.mode == "Neon") and 0.18 or 0.12
-            createVolumetricBeam(prevPos, part.Position, traceSettings.color, traceSettings.mode, width, traceSettings.lifetime)
+            createTrailLaser(prevPos, part.Position, traceSettings.color, width, traceSettings.lifetime, traceSettings.mode)
             finished = true
             if conn then conn:Disconnect() end
         end
     end)
 end
 
-local function createArrowBeamVolumetric(part)
+-- Arrow
+local function createArrowTrail(part)
     local prevPos = part.Position
     local conn
     local finished = false
@@ -1165,7 +1138,7 @@ local function createArrowBeamVolumetric(part)
         local currPos = part.Position
         if (currPos - prevPos).Magnitude > 0.01 then
             local width = (traceSettings.mode == "Neon") and 0.18 or 0.12
-            createVolumetricBeam(prevPos, currPos, traceSettings.color, traceSettings.mode, width, traceSettings.lifetime)
+            createTrailLaser(prevPos, currPos, traceSettings.color, width, traceSettings.lifetime, traceSettings.mode)
             prevPos = currPos
         end
     end
@@ -1173,13 +1146,14 @@ local function createArrowBeamVolumetric(part)
     part.Destroying:Connect(function()
         if not finished then
             local width = (traceSettings.mode == "Neon") and 0.18 or 0.12
-            createVolumetricBeam(prevPos, part.Position, traceSettings.color, traceSettings.mode, width, traceSettings.lifetime)
+            createTrailLaser(prevPos, part.Position, traceSettings.color, width, traceSettings.lifetime, traceSettings.mode)
             finished = true
             if conn then conn:Disconnect() end
         end
     end)
 end
 
+-- Update traces
 local function updateBulletTraces()
     local ignore = workspace:FindFirstChild("Const") and workspace.Const:FindFirstChild("Ignore")
     if not ignore then return end
@@ -1187,12 +1161,12 @@ local function updateBulletTraces()
         if obj.Name == "Arrow" and traceSettings.enabled then
             if not bulletTraces[obj] then
                 bulletTraces[obj] = true
-                createArrowBeamVolumetric(obj)
+                createArrowTrail(obj)
             end
         elseif obj.Name == "Bullet" and traceSettings.enabled then
             if not bulletTraces[obj] then
                 bulletTraces[obj] = true
-                createBulletBeamVolumetric(obj)
+                createBulletTrail(obj)
             end
         end
     end
