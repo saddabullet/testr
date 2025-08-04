@@ -1006,11 +1006,11 @@ game:GetService("RunService").RenderStepped:Connect(function()
 end)
 -- конец chams, дальше идёт BULLET TRACE
 ------------------------------------------------------------
--- BULLET TRACE через Beam (3D Laser/Neon, с LifeTime, цвет, ширина)
+-- BULLET TRACE через Beam (3D Laser/Neon, Fade-out от конца к началу, красивые режимы)
 ------------------------------------------------------------
 local bulletTraces = {}
 
-local function createBeam(startPos, endPos, color, mode, width, life)
+local function createBeam3D(startPos, endPos, color, mode, width, life)
     -- Создание Attachments
     local partFrom = Instance.new("Part")
     partFrom.Anchored = true
@@ -1033,53 +1033,92 @@ local function createBeam(startPos, endPos, color, mode, width, life)
     local attTo = Instance.new("Attachment")
     attTo.Parent = partTo
 
-    -- Beam
-    local beam = Instance.new("Beam")
-    beam.Attachment0 = attFrom
-    beam.Attachment1 = attTo
-    beam.FaceCamera = true
-    beam.Color = ColorSequence.new(color)
-    beam.LightEmission = (mode == "Neon") and 1 or 0.6
-    beam.Transparency = NumberSequence.new({
-        NumberSequenceKeypoint.new(0, 0),
-        NumberSequenceKeypoint.new(0.8, 0.2),
-        NumberSequenceKeypoint.new(1, 1)
+    -- Transparency fade: от конца к началу (0 — видно, 1 — прозрачно)
+    local transparency = NumberSequence.new({
+        NumberSequenceKeypoint.new(0, 0),   -- Начало — видно
+        NumberSequenceKeypoint.new(0.7, 0.15), -- середина почти видно
+        NumberSequenceKeypoint.new(0.9, 0.8), -- ближе к концу почти прозрачно
+        NumberSequenceKeypoint.new(1, 1)    -- Конец — прозрачно
     })
-    beam.Width0 = width
-    beam.Width1 = width
-    beam.Parent = partFrom
 
-    -- Для красивого Neon/Lazer эффекта можно сделать Beam с белым внутренним Core (доп. Beam)
-    if mode == "Lazer" or mode == "Neon" then
+    -- Beam режим Neon: один цветной Beam
+    if mode == "Neon" then
+        local beam = Instance.new("Beam")
+        beam.Attachment0 = attFrom
+        beam.Attachment1 = attTo
+        beam.FaceCamera = false -- 3D beam, не лента!
+        beam.Color = ColorSequence.new(color)
+        beam.LightEmission = 1
+        beam.Transparency = transparency
+        beam.Width0 = width
+        beam.Width1 = width
+        beam.Parent = partFrom
+
+        -- Fade-out
+        local fadeSteps = 30
+        local fadeTime = life or 0.5
+        for i = 1, fadeSteps do
+            task.delay((fadeTime/fadeSteps)*i, function()
+                -- Transparency изменяется: конец исчезает, начало видно
+                local t = i/fadeSteps
+                beam.Transparency = NumberSequence.new({
+                    NumberSequenceKeypoint.new(0, 0),
+                    NumberSequenceKeypoint.new(1-t, 0.2 + 0.8*t),
+                    NumberSequenceKeypoint.new(1, 1)
+                })
+            end)
+        end
+        task.delay(fadeTime, function()
+            if partFrom then partFrom:Destroy() end
+            if partTo then partTo:Destroy() end
+        end)
+    end
+
+    -- Beam режим Lazer: двойной Beam (outline + core)
+    if mode == "Lazer" then
+        local beamGlow = Instance.new("Beam")
+        beamGlow.Attachment0 = attFrom
+        beamGlow.Attachment1 = attTo
+        beamGlow.FaceCamera = false
+        beamGlow.Color = ColorSequence.new(color)
+        beamGlow.LightEmission = 0.7
+        beamGlow.Transparency = transparency
+        beamGlow.Width0 = width
+        beamGlow.Width1 = width
+        beamGlow.Parent = partFrom
+
         local beamCore = Instance.new("Beam")
         beamCore.Attachment0 = attFrom
         beamCore.Attachment1 = attTo
-        beamCore.FaceCamera = true
+        beamCore.FaceCamera = false
         beamCore.Color = ColorSequence.new(Color3.new(1,1,1))
         beamCore.LightEmission = 1
-        beamCore.Transparency = NumberSequence.new(0.15)
+        beamCore.Transparency = NumberSequence.new(0.05)
         beamCore.Width0 = width * 0.45
         beamCore.Width1 = width * 0.45
         beamCore.Parent = partFrom
+
+        local fadeSteps = 30
+        local fadeTime = life or 0.5
+        for i = 1, fadeSteps do
+            task.delay((fadeTime/fadeSteps)*i, function()
+                local t = i/fadeSteps
+                beamGlow.Transparency = NumberSequence.new({
+                    NumberSequenceKeypoint.new(0, 0),
+                    NumberSequenceKeypoint.new(1-t, 0.2 + 0.8*t),
+                    NumberSequenceKeypoint.new(1, 1)
+                })
+                beamCore.Transparency = NumberSequence.new(0.05 + 0.95*t)
+            end)
+        end
+        task.delay(fadeTime, function()
+            if partFrom then partFrom:Destroy() end
+            if partTo then partTo:Destroy() end
+        end)
     end
-
-    -- Удаление
-    task.delay(life or 0.5, function()
-        if partFrom then partFrom:Destroy() end
-        if partTo then partTo:Destroy() end
-    end)
 end
 
-local function getStartAndEnd(part)
-    -- Начальная точка — позиция part на момент создания или позиция дула, если есть
-    local startPos = part.Position
-    -- Конечная точка — позиция на каждом кадре, либо точка попадания (если можешь определить)
-    -- Здесь просто берём текущую позицию
-    local endPos = part.Position
-    return startPos, endPos
-end
-
-local function createBulletBeam(part)
+local function createBulletBeam3D(part)
     local prevPos = part.Position
     local conn
     local finished = false
@@ -1091,21 +1130,23 @@ local function createBulletBeam(part)
         end
         local currPos = part.Position
         if (currPos - prevPos).Magnitude > 0.01 then
-            createBeam(prevPos, currPos, traceSettings.color, traceSettings.mode, traceSettings.mode == "Neon" and 0.25 or 0.16, traceSettings.lifetime)
+            local width = (traceSettings.mode == "Neon") and 0.18 or 0.12
+            createBeam3D(prevPos, currPos, traceSettings.color, traceSettings.mode, width, traceSettings.lifetime)
             prevPos = currPos
         end
     end
     conn = game:GetService("RunService").RenderStepped:Connect(drawTrace)
     part.Destroying:Connect(function()
         if not finished then
-            createBeam(prevPos, part.Position, traceSettings.color, traceSettings.mode, traceSettings.mode == "Neon" and 0.25 or 0.16, traceSettings.lifetime)
+            local width = (traceSettings.mode == "Neon") and 0.18 or 0.12
+            createBeam3D(prevPos, part.Position, traceSettings.color, traceSettings.mode, width, traceSettings.lifetime)
             finished = true
             if conn then conn:Disconnect() end
         end
     end)
 end
 
-local function createArrowBeam(part)
+local function createArrowBeam3D(part)
     local prevPos = part.Position
     local conn
     local finished = false
@@ -1117,14 +1158,16 @@ local function createArrowBeam(part)
         end
         local currPos = part.Position
         if (currPos - prevPos).Magnitude > 0.01 then
-            createBeam(prevPos, currPos, traceSettings.color, traceSettings.mode, traceSettings.mode == "Neon" and 0.25 or 0.16, traceSettings.lifetime)
+            local width = (traceSettings.mode == "Neon") and 0.18 or 0.12
+            createBeam3D(prevPos, currPos, traceSettings.color, traceSettings.mode, width, traceSettings.lifetime)
             prevPos = currPos
         end
     end
     conn = game:GetService("RunService").RenderStepped:Connect(drawTrace)
     part.Destroying:Connect(function()
         if not finished then
-            createBeam(prevPos, part.Position, traceSettings.color, traceSettings.mode, traceSettings.mode == "Neon" and 0.25 or 0.16, traceSettings.lifetime)
+            local width = (traceSettings.mode == "Neon") and 0.18 or 0.12
+            createBeam3D(prevPos, part.Position, traceSettings.color, traceSettings.mode, width, traceSettings.lifetime)
             finished = true
             if conn then conn:Disconnect() end
         end
@@ -1138,12 +1181,12 @@ local function updateBulletTraces()
         if obj.Name == "Arrow" and traceSettings.enabled then
             if not bulletTraces[obj] then
                 bulletTraces[obj] = true
-                createArrowBeam(obj)
+                createArrowBeam3D(obj)
             end
         elseif obj.Name == "Bullet" and traceSettings.enabled then
             if not bulletTraces[obj] then
                 bulletTraces[obj] = true
-                createBulletBeam(obj)
+                createBulletBeam3D(obj)
             end
         end
     end
