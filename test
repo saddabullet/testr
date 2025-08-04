@@ -1006,25 +1006,23 @@ game:GetService("RunService").RenderStepped:Connect(function()
 end)
 -- конец chams, дальше идёт BULLET TRACE
 ------------------------------------------------------------
--- BULLET TRACE через Beam (fade-out только в конце, начало всегда видно, без кусков)
+-- BULLET TRACE через Beam (fade-out хвоста максимально плавно, нет ступеней)
 ------------------------------------------------------------
 local bulletTraces = {}
 local RunService = game:GetService("RunService")
 
--- Генерация NumberSequence: начало 100% видно, fade-out только в конце
-local function makeTailFadeSequence(fade)
-    -- fade [0..1] — от 0 (видно) до 1 (прозрачно в конце)
+-- Суперплавный fade-out NumberSequence (куски минимальны)
+local function makeUltraSmoothSequence(fade)
     local points = {}
-    local numKeypoints = 12
+    local numKeypoints = 30
     for i = 0, numKeypoints do
         local t = i / numKeypoints
+        -- Начало видно, хвост исчезает очень плавно по всей длине от 0.7 и дальше
         local value
-        if t < 0.85 then
+        if t < 0.7 then
             value = 0
-        elseif t >= 0.85 and t < 0.97 then
-            value = math.clamp((t-0.85)/0.12 * fade, 0, fade)
         else
-            value = fade
+            value = math.clamp((t - 0.7) / 0.3 * fade, 0, fade)
         end
         table.insert(points, NumberSequenceKeypoint.new(t, value))
     end
@@ -1032,7 +1030,6 @@ local function makeTailFadeSequence(fade)
 end
 
 local function createBeamLaser(startPos, endPos, color, mode, width, lifetime)
-    -- Attachments (не двигаются)
     local partFrom = Instance.new("Part")
     partFrom.Anchored = true
     partFrom.CanCollide = false
@@ -1065,13 +1062,12 @@ local function createBeamLaser(startPos, endPos, color, mode, width, lifetime)
         beam.LightEmission = 1
         beam.Width0 = width * 0.85
         beam.Width1 = width * 0.85
-        beam.Transparency = makeTailFadeSequence(0)
+        beam.Transparency = makeUltraSmoothSequence(0)
         beam.CurveSize0 = 0
         beam.CurveSize1 = 0
         beam.Parent = partFrom
         table.insert(beams, beam)
     elseif mode == "Lazer" then
-        -- Цветной glow
         local beamGlow = Instance.new("Beam")
         beamGlow.Attachment0 = attFrom
         beamGlow.Attachment1 = attTo
@@ -1080,12 +1076,12 @@ local function createBeamLaser(startPos, endPos, color, mode, width, lifetime)
         beamGlow.LightEmission = 0.7
         beamGlow.Width0 = width
         beamGlow.Width1 = width
-        beamGlow.Transparency = makeTailFadeSequence(0)
+        beamGlow.Transparency = makeUltraSmoothSequence(0)
         beamGlow.CurveSize0 = 0
         beamGlow.CurveSize1 = 0
         beamGlow.Parent = partFrom
         table.insert(beams, beamGlow)
-        -- Белый core
+
         local beamCore = Instance.new("Beam")
         beamCore.Attachment0 = attFrom
         beamCore.Attachment1 = attTo
@@ -1094,14 +1090,14 @@ local function createBeamLaser(startPos, endPos, color, mode, width, lifetime)
         beamCore.LightEmission = 1
         beamCore.Width0 = width * 0.45
         beamCore.Width1 = width * 0.45
-        beamCore.Transparency = makeTailFadeSequence(0.05)
+        beamCore.Transparency = makeUltraSmoothSequence(0.05)
         beamCore.CurveSize0 = 0
         beamCore.CurveSize1 = 0
         beamCore.Parent = partFrom
         table.insert(beams, beamCore)
     end
 
-    -- Плавный fade-out, только конец исчезает!
+    -- Fade-out хвоста
     local fadeSteps = 30
     local fadeTime = lifetime or 0.5
     for i = 1, fadeSteps do
@@ -1109,15 +1105,14 @@ local function createBeamLaser(startPos, endPos, color, mode, width, lifetime)
             local fade = i/fadeSteps
             for _,beam in ipairs(beams) do
                 if mode == "Lazer" and beam.Color.Keypoints[1].Value == Color3.new(1,1,1) then
-                    beam.Transparency = makeTailFadeSequence(0.05 + 0.95*fade)
+                    beam.Transparency = makeUltraSmoothSequence(0.05 + 0.95*fade)
                 else
-                    beam.Transparency = makeTailFadeSequence(fade)
+                    beam.Transparency = makeUltraSmoothSequence(fade)
                 end
             end
         end)
     end
 
-    -- Удаление
     task.delay(fadeTime + 0.1, function()
         if partFrom then partFrom:Destroy() end
         if partTo then partTo:Destroy() end
