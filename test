@@ -1006,119 +1006,125 @@ game:GetService("RunService").RenderStepped:Connect(function()
 end)
 -- конец chams, дальше идёт BULLET TRACE
 ------------------------------------------------------------
--- BULLET TRACE через Beam (3D Laser/Neon, Fade-out от конца к началу, красивые режимы)
+-- BULLET TRACE (Объёмный Laser/Neon, Fade-out от начала к концу, без багов)
 ------------------------------------------------------------
 local bulletTraces = {}
+local RunService = game:GetService("RunService")
 
-local function createBeam3D(startPos, endPos, color, mode, width, life)
-    -- Создание Attachments
-    local partFrom = Instance.new("Part")
-    partFrom.Anchored = true
-    partFrom.CanCollide = false
-    partFrom.Transparency = 1
-    partFrom.Size = Vector3.new(0.1,0.1,0.1)
-    partFrom.Position = startPos
-    partFrom.Parent = workspace
+-- Сколько Beam для объёмного эффекта
+local VOLUME_BEAMS = 8
 
-    local partTo = Instance.new("Part")
-    partTo.Anchored = true
-    partTo.CanCollide = false
-    partTo.Transparency = 1
-    partTo.Size = Vector3.new(0.1,0.1,0.1)
-    partTo.Position = endPos
-    partTo.Parent = workspace
+-- Вращение точки вокруг оси
+local function rotateAroundAxis(center, dir, radius, angle)
+    local up = Vector3.new(0,1,0)
+    if math.abs(dir:Dot(up)) > 0.99 then up = Vector3.new(1,0,0) end
+    local right = dir:Cross(up).Unit
+    local upVec = right:Cross(dir).Unit
+    local x = math.cos(angle) * right * radius
+    local y = math.sin(angle) * upVec * radius
+    return center + x + y
+end
 
-    local attFrom = Instance.new("Attachment")
-    attFrom.Parent = partFrom
-    local attTo = Instance.new("Attachment")
-    attTo.Parent = partTo
+local function createVolumetricBeam(startPos, endPos, color, mode, width, life)
+    local dir = (endPos - startPos).Unit
+    local beams = {}
 
-    -- Transparency fade: от конца к началу (0 — видно, 1 — прозрачно)
-    local transparency = NumberSequence.new({
-        NumberSequenceKeypoint.new(0, 0),   -- Начало — видно
-        NumberSequenceKeypoint.new(0.7, 0.15), -- середина почти видно
-        NumberSequenceKeypoint.new(0.9, 0.8), -- ближе к концу почти прозрачно
-        NumberSequenceKeypoint.new(1, 1)    -- Конец — прозрачно
-    })
+    -- Главный Beam (центр)
+    local function makeBeam(from, to, clr, w, emission, transparency)
+        local partFrom = Instance.new("Part")
+        partFrom.Anchored = true
+        partFrom.CanCollide = false
+        partFrom.Transparency = 1
+        partFrom.Size = Vector3.new(0.1,0.1,0.1)
+        partFrom.Position = from
+        partFrom.Parent = workspace
 
-    -- Beam режим Neon: один цветной Beam
-    if mode == "Neon" then
+        local partTo = Instance.new("Part")
+        partTo.Anchored = true
+        partTo.CanCollide = false
+        partTo.Transparency = 1
+        partTo.Size = Vector3.new(0.1,0.1,0.1)
+        partTo.Position = to
+        partTo.Parent = workspace
+
+        local attFrom = Instance.new("Attachment")
+        attFrom.Parent = partFrom
+        local attTo = Instance.new("Attachment")
+        attTo.Parent = partTo
+
         local beam = Instance.new("Beam")
         beam.Attachment0 = attFrom
         beam.Attachment1 = attTo
-        beam.FaceCamera = false -- 3D beam, не лента!
-        beam.Color = ColorSequence.new(color)
-        beam.LightEmission = 1
-        beam.Transparency = transparency
-        beam.Width0 = width
-        beam.Width1 = width
+        beam.FaceCamera = false
+        beam.LightEmission = emission
+        beam.Width0 = w
+        beam.Width1 = w
+        beam.Color = ColorSequence.new(clr)
+        beam.Transparency = transparency or NumberSequence.new(0)
+        beam.CurveSize0 = 0
+        beam.CurveSize1 = 0
         beam.Parent = partFrom
 
-        -- Fade-out
-        local fadeSteps = 30
-        local fadeTime = life or 0.5
-        for i = 1, fadeSteps do
-            task.delay((fadeTime/fadeSteps)*i, function()
-                -- Transparency изменяется: конец исчезает, начало видно
-                local t = i/fadeSteps
-                beam.Transparency = NumberSequence.new({
-                    NumberSequenceKeypoint.new(0, 0),
-                    NumberSequenceKeypoint.new(1-t, 0.2 + 0.8*t),
-                    NumberSequenceKeypoint.new(1, 1)
-                })
-            end)
+        return {beam=beam, att0=attFrom, att1=attTo, part0=partFrom, part1=partTo}
+    end
+
+    -- Основная ось
+    local transparency = NumberSequence.new{
+        NumberSequenceKeypoint.new(0, 0),
+        NumberSequenceKeypoint.new(0.9, 0.1),
+        NumberSequenceKeypoint.new(1, 1)
+    }
+    if mode == "Neon" then
+        table.insert(beams, makeBeam(startPos, endPos, color, width, 1, transparency))
+    elseif mode == "Lazer" then
+        table.insert(beams, makeBeam(startPos, endPos, color, width, 0.7, transparency))
+        table.insert(beams, makeBeam(startPos, endPos, Color3.new(1,1,1), width*0.45, 1, NumberSequence.new(0.05)))
+    end
+
+    -- Вспомогательные Beam для объёма
+    for i = 1,VOLUME_BEAMS do
+        local angle = (2*math.pi/VOLUME_BEAMS)*i
+        local from = rotateAroundAxis(startPos, dir, width*0.4, angle)
+        local to = rotateAroundAxis(endPos, dir, width*0.4, angle)
+        if mode == "Neon" then
+            table.insert(beams, makeBeam(from, to, color, width*0.25, 1, transparency))
+        elseif mode == "Lazer" then
+            table.insert(beams, makeBeam(from, to, color, width*0.17, 0.7, transparency))
+            table.insert(beams, makeBeam(from, to, Color3.new(1,1,1), width*0.09, 1, NumberSequence.new(0.05)))
         end
-        task.delay(fadeTime, function()
-            if partFrom then partFrom:Destroy() end
-            if partTo then partTo:Destroy() end
+    end
+
+    -- Fade-out от начала к концу: Attachment0 двигается к Attachment1, transparency увеличивается
+    local fadeSteps = 30
+    local fadeTime = life or 0.5
+    for step = 1,fadeSteps do
+        task.delay((fadeTime/fadeSteps)*step, function()
+            local alpha = step/fadeSteps
+            for _,b in ipairs(beams) do
+                -- Двигаем точку начала к концу
+                b.att0.WorldPosition = startPos:Lerp(endPos, alpha)
+                -- Меняем transparency: начало видно, конец прозрачное
+                if b.beam.Color.Keypoints[1].Value == Color3.new(1,1,1) then
+                    b.beam.Transparency = NumberSequence.new(0.05 + 0.95*alpha)
+                else
+                    b.beam.Transparency = NumberSequence.new{
+                        NumberSequenceKeypoint.new(0, 0+alpha*0.9),
+                        NumberSequenceKeypoint.new(1, 1)
+                    }
+                end
+            end
         end)
     end
 
-    -- Beam режим Lazer: двойной Beam (outline + core)
-    if mode == "Lazer" then
-        local beamGlow = Instance.new("Beam")
-        beamGlow.Attachment0 = attFrom
-        beamGlow.Attachment1 = attTo
-        beamGlow.FaceCamera = false
-        beamGlow.Color = ColorSequence.new(color)
-        beamGlow.LightEmission = 0.7
-        beamGlow.Transparency = transparency
-        beamGlow.Width0 = width
-        beamGlow.Width1 = width
-        beamGlow.Parent = partFrom
-
-        local beamCore = Instance.new("Beam")
-        beamCore.Attachment0 = attFrom
-        beamCore.Attachment1 = attTo
-        beamCore.FaceCamera = false
-        beamCore.Color = ColorSequence.new(Color3.new(1,1,1))
-        beamCore.LightEmission = 1
-        beamCore.Transparency = NumberSequence.new(0.05)
-        beamCore.Width0 = width * 0.45
-        beamCore.Width1 = width * 0.45
-        beamCore.Parent = partFrom
-
-        local fadeSteps = 30
-        local fadeTime = life or 0.5
-        for i = 1, fadeSteps do
-            task.delay((fadeTime/fadeSteps)*i, function()
-                local t = i/fadeSteps
-                beamGlow.Transparency = NumberSequence.new({
-                    NumberSequenceKeypoint.new(0, 0),
-                    NumberSequenceKeypoint.new(1-t, 0.2 + 0.8*t),
-                    NumberSequenceKeypoint.new(1, 1)
-                })
-                beamCore.Transparency = NumberSequence.new(0.05 + 0.95*t)
-            end)
+    task.delay(fadeTime+0.05, function()
+        for _,b in ipairs(beams) do
+            if b.part0 then b.part0:Destroy() end
+            if b.part1 then b.part1:Destroy() end
         end
-        task.delay(fadeTime, function()
-            if partFrom then partFrom:Destroy() end
-            if partTo then partTo:Destroy() end
-        end)
-    end
+    end)
 end
 
-local function createBulletBeam3D(part)
+local function createBulletBeamVolumetric(part)
     local prevPos = part.Position
     local conn
     local finished = false
@@ -1131,22 +1137,22 @@ local function createBulletBeam3D(part)
         local currPos = part.Position
         if (currPos - prevPos).Magnitude > 0.01 then
             local width = (traceSettings.mode == "Neon") and 0.18 or 0.12
-            createBeam3D(prevPos, currPos, traceSettings.color, traceSettings.mode, width, traceSettings.lifetime)
+            createVolumetricBeam(prevPos, currPos, traceSettings.color, traceSettings.mode, width, traceSettings.lifetime)
             prevPos = currPos
         end
     end
-    conn = game:GetService("RunService").RenderStepped:Connect(drawTrace)
+    conn = RunService.RenderStepped:Connect(drawTrace)
     part.Destroying:Connect(function()
         if not finished then
             local width = (traceSettings.mode == "Neon") and 0.18 or 0.12
-            createBeam3D(prevPos, part.Position, traceSettings.color, traceSettings.mode, width, traceSettings.lifetime)
+            createVolumetricBeam(prevPos, part.Position, traceSettings.color, traceSettings.mode, width, traceSettings.lifetime)
             finished = true
             if conn then conn:Disconnect() end
         end
     end)
 end
 
-local function createArrowBeam3D(part)
+local function createArrowBeamVolumetric(part)
     local prevPos = part.Position
     local conn
     local finished = false
@@ -1159,15 +1165,15 @@ local function createArrowBeam3D(part)
         local currPos = part.Position
         if (currPos - prevPos).Magnitude > 0.01 then
             local width = (traceSettings.mode == "Neon") and 0.18 or 0.12
-            createBeam3D(prevPos, currPos, traceSettings.color, traceSettings.mode, width, traceSettings.lifetime)
+            createVolumetricBeam(prevPos, currPos, traceSettings.color, traceSettings.mode, width, traceSettings.lifetime)
             prevPos = currPos
         end
     end
-    conn = game:GetService("RunService").RenderStepped:Connect(drawTrace)
+    conn = RunService.RenderStepped:Connect(drawTrace)
     part.Destroying:Connect(function()
         if not finished then
             local width = (traceSettings.mode == "Neon") and 0.18 or 0.12
-            createBeam3D(prevPos, part.Position, traceSettings.color, traceSettings.mode, width, traceSettings.lifetime)
+            createVolumetricBeam(prevPos, part.Position, traceSettings.color, traceSettings.mode, width, traceSettings.lifetime)
             finished = true
             if conn then conn:Disconnect() end
         end
@@ -1181,12 +1187,12 @@ local function updateBulletTraces()
         if obj.Name == "Arrow" and traceSettings.enabled then
             if not bulletTraces[obj] then
                 bulletTraces[obj] = true
-                createArrowBeam3D(obj)
+                createArrowBeamVolumetric(obj)
             end
         elseif obj.Name == "Bullet" and traceSettings.enabled then
             if not bulletTraces[obj] then
                 bulletTraces[obj] = true
-                createBulletBeam3D(obj)
+                createBulletBeamVolumetric(obj)
             end
         end
     end
@@ -1198,7 +1204,7 @@ workspace.DescendantAdded:Connect(function(child)
         updateBulletTraces()
     end
 end)
-game:GetService("RunService").RenderStepped:Connect(function()
+RunService.RenderStepped:Connect(function()
     if traceSettings.enabled then
         updateBulletTraces()
     end
