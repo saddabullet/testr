@@ -1006,13 +1006,32 @@ game:GetService("RunService").RenderStepped:Connect(function()
 end)
 -- конец chams, дальше идёт BULLET TRACE
 ------------------------------------------------------------
--- BULLET TRACE через Beam, исчезает от конца к началу, без кусков
+-- BULLET TRACE через Beam (tail fade-out без кусков, плавно, Neon/Lazer)
 ------------------------------------------------------------
 local bulletTraces = {}
 local RunService = game:GetService("RunService")
 
-local function createBeamLaserShrink(startPos, endPos, color, mode, width, lifetime)
-    -- Attachments
+-- Генерация NumberSequence: fade-out с 65% до конца, много кейпоинтов
+local function makeTailFadeSequence(fade)
+    local points = {}
+    local numKeypoints = 25
+    for i = 0, numKeypoints do
+        local t = i / numKeypoints
+        local value
+        if t < 0.65 then
+            value = 0
+        else
+            -- fade начинается от 0.65 до конца
+            local fadeT = (t - 0.65) / (1 - 0.65)
+            value = fadeT * fade
+        end
+        table.insert(points, NumberSequenceKeypoint.new(t, value))
+    end
+    return NumberSequence.new(points)
+end
+
+local function createBeamLaser(startPos, endPos, color, mode, width, lifetime)
+    -- Attachments (не двигаются)
     local partFrom = Instance.new("Part")
     partFrom.Anchored = true
     partFrom.CanCollide = false
@@ -1045,12 +1064,13 @@ local function createBeamLaserShrink(startPos, endPos, color, mode, width, lifet
         beam.LightEmission = 1
         beam.Width0 = width * 0.85
         beam.Width1 = width * 0.85
-        beam.Transparency = NumberSequence.new(0)
+        beam.Transparency = makeTailFadeSequence(0)
         beam.CurveSize0 = 0
         beam.CurveSize1 = 0
         beam.Parent = partFrom
         table.insert(beams, beam)
     elseif mode == "Lazer" then
+        -- Цветной glow
         local beamGlow = Instance.new("Beam")
         beamGlow.Attachment0 = attFrom
         beamGlow.Attachment1 = attTo
@@ -1059,11 +1079,12 @@ local function createBeamLaserShrink(startPos, endPos, color, mode, width, lifet
         beamGlow.LightEmission = 0.7
         beamGlow.Width0 = width
         beamGlow.Width1 = width
-        beamGlow.Transparency = NumberSequence.new(0)
+        beamGlow.Transparency = makeTailFadeSequence(0)
         beamGlow.CurveSize0 = 0
         beamGlow.CurveSize1 = 0
         beamGlow.Parent = partFrom
         table.insert(beams, beamGlow)
+        -- Белый core
         local beamCore = Instance.new("Beam")
         beamCore.Attachment0 = attFrom
         beamCore.Attachment1 = attTo
@@ -1072,25 +1093,31 @@ local function createBeamLaserShrink(startPos, endPos, color, mode, width, lifet
         beamCore.LightEmission = 1
         beamCore.Width0 = width * 0.45
         beamCore.Width1 = width * 0.45
-        beamCore.Transparency = NumberSequence.new(0)
+        beamCore.Transparency = makeTailFadeSequence(0.05)
         beamCore.CurveSize0 = 0
         beamCore.CurveSize1 = 0
         beamCore.Parent = partFrom
         table.insert(beams, beamCore)
     end
 
-    -- Анимация исчезновения: двигаем Attachment1 к Attachment0
-    local steps = 30
-    local time = lifetime or 0.5
-    for i = 1, steps do
-        task.delay((time/steps)*i, function()
-            local alpha = i/steps
-            local newPos = startPos:Lerp(endPos, 1-alpha)
-            attTo.WorldPosition = newPos
+    -- Плавный fade-out, только конец исчезает!
+    local fadeSteps = 30
+    local fadeTime = lifetime or 0.5
+    for i = 1, fadeSteps do
+        task.delay((fadeTime/fadeSteps) * i, function()
+            local fade = i/fadeSteps
+            for _,beam in ipairs(beams) do
+                if mode == "Lazer" and beam.Color.Keypoints[1].Value == Color3.new(1,1,1) then
+                    beam.Transparency = makeTailFadeSequence(0.05 + 0.95*fade)
+                else
+                    beam.Transparency = makeTailFadeSequence(fade)
+                end
+            end
         end)
     end
 
-    task.delay(time + 0.1, function()
+    -- Удаление
+    task.delay(fadeTime + 0.1, function()
         if partFrom then partFrom:Destroy() end
         if partTo then partTo:Destroy() end
     end)
@@ -1109,7 +1136,7 @@ local function createBulletBeam(part)
         local currPos = part.Position
         if (currPos - prevPos).Magnitude > 0.01 then
             local width = (traceSettings.mode == "Neon") and 0.18 or 0.12
-            createBeamLaserShrink(prevPos, currPos, traceSettings.color, traceSettings.mode, width, traceSettings.lifetime)
+            createBeamLaser(prevPos, currPos, traceSettings.color, traceSettings.mode, width, traceSettings.lifetime)
             prevPos = currPos
         end
     end
@@ -1117,7 +1144,7 @@ local function createBulletBeam(part)
     part.Destroying:Connect(function()
         if not finished then
             local width = (traceSettings.mode == "Neon") and 0.18 or 0.12
-            createBeamLaserShrink(prevPos, part.Position, traceSettings.color, traceSettings.mode, width, traceSettings.lifetime)
+            createBeamLaser(prevPos, part.Position, traceSettings.color, traceSettings.mode, width, traceSettings.lifetime)
             finished = true
             if conn then conn:Disconnect() end
         end
@@ -1137,7 +1164,7 @@ local function createArrowBeam(part)
         local currPos = part.Position
         if (currPos - prevPos).Magnitude > 0.01 then
             local width = (traceSettings.mode == "Neon") and 0.18 or 0.12
-            createBeamLaserShrink(prevPos, currPos, traceSettings.color, traceSettings.mode, width, traceSettings.lifetime)
+            createBeamLaser(prevPos, currPos, traceSettings.color, traceSettings.mode, width, traceSettings.lifetime)
             prevPos = currPos
         end
     end
@@ -1145,7 +1172,7 @@ local function createArrowBeam(part)
     part.Destroying:Connect(function()
         if not finished then
             local width = (traceSettings.mode == "Neon") and 0.18 or 0.12
-            createBeamLaserShrink(prevPos, part.Position, traceSettings.color, traceSettings.mode, width, traceSettings.lifetime)
+            createBeamLaser(prevPos, part.Position, traceSettings.color, traceSettings.mode, width, traceSettings.lifetime)
             finished = true
             if conn then conn:Disconnect() end
         end
