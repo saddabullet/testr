@@ -64,8 +64,8 @@ return function(VisualTab)
     }
     local traceSettings = {
         enabled = false,
-        color = Color3.new(0, 0.7, 1),
-        mode = "Lazer", -- Neon / Lazer / ForceField
+        color = Color3.new(1, 1, 1),
+        mode = "Lazer", -- Default only Neon/Lazer/ForceField
         lifetime = 0.5,
     }
     local logSettings = {
@@ -173,44 +173,68 @@ return function(VisualTab)
     local WorldBox = VisualTab:AddRightGroupbox("World", "globe")
     local SafeZoneBox = VisualTab:AddRightGroupbox("Safe zone", "shield", {Bottom=true})
 
-    -- Bullet Trace UI
-    WorldBox:AddToggle("BulletTrace", {Text="Bullet Trace", Default=false, Callback=function(val)traceSettings.enabled=val end})
-        :AddColorPicker("BulletTraceColor", {Default=Color3.new(0,0.7,1), Title="Bullet Trace Color", Callback=function(val)traceSettings.color=val end})
-    WorldBox:AddDropdown("BulletTraceMode", {
-        Values={"Neon","Lazer","ForceField"},
-        Default="Lazer",
-        Text="Bullet Trace Mode",
-        Callback=function(val) traceSettings.mode=val end
+    -- CHAMS UI
+    local handChamsToggle = ChamsBox:AddToggle("HandChams", {
+        Text = "Hand Chams",
+        Default = chamsSettings.hand,
+        Callback = function(val) chamsSettings.hand = val end
     })
-    WorldBox:AddSlider("BulletTraceLifetime", {
-        Text="Life time",
-        Default=0.5,
-        Min=0,
-        Max=20,
-        Rounding=2,
-        Callback=function(val)traceSettings.lifetime=val end
+    local handColorPicker = handChamsToggle:AddColorPicker("HandChamsColor", {
+        Default = chamsSettings.handColor,
+        Text = "Hand Color",
+        Callback = function(val) chamsSettings.handColor = val end
+    })
+    local handMatDropdown = ChamsBox:AddDropdown("HandChamsMat", {
+        Values = {"ForceField", "Neon", "Chams"},
+        Default = chamsSettings.handMat,
+        Text = "Hand Material",
+        Callback = function(val) chamsSettings.handMat = val end
+    })
+    local itemChamsToggle = ChamsBox:AddToggle("ItemChams", {
+        Text = "Item Chams",
+        Default = chamsSettings.item,
+        Callback = function(val) chamsSettings.item = val end
+    })
+    local itemColorPicker = itemChamsToggle:AddColorPicker("ItemChamsColor", {
+        Default = chamsSettings.itemColor,
+        Text = "Item Color",
+        Callback = function(val) chamsSettings.itemColor = val end
+    })
+    local itemMatDropdown = ChamsBox:AddDropdown("ItemChamsMat", {
+        Values = {"ForceField", "Neon", "Chams"},
+        Default = chamsSettings.itemMat,
+        Text = "Item Material",
+        Callback = function(val) chamsSettings.itemMat = val end
     })
 
-    -- Hit Sound UI
-    WorldBox:AddToggle("HitSound", {
-        Text="Hit sound",
-        Default=hitSoundSettings.enabled,
-        Callback=function(val) hitSoundSettings.enabled=val; updateHitSounds() end
-    })
-    WorldBox:AddDropdown("HitSoundType", {
-        Values={"Rust","Skeet","Sonic","Sonic Checkpoint","Oof","Windows XP Error","Punch","Buble","byebye","cowbell"},
-        Default="Rust",
-        Text="Hit sound type",
-        Callback=function(val) hitSoundSettings.soundType=val; updateHitSounds() end
-    })
+    -- SAFE ZONE CHAMS UI
+    local szChamsToggle = SafeZoneBox:AddToggle("SafeZoneChams",{Text="Safe zone chams",Default=safeZoneChamsSettings.enabled,Callback=function(val)safeZoneChamsSettings.enabled=val end})
+    szChamsToggle:AddColorPicker("SafeZoneChamsColor",{Default=safeZoneChamsSettings.color,Callback=function(val)safeZoneChamsSettings.color=val end})
+    SafeZoneBox:AddSlider("SafeZoneChamsTransparency",{Text="Transparency",Default=safeZoneChamsSettings.transparency,Min=1,Max=100,Rounding=0,Callback=function(val)safeZoneChamsSettings.transparency=val end})
 
-    -- Skybox selection
-    WorldBox:AddDropdown("SkyboxSelect", {
+    -- World UI
+    WorldBox:AddLabel("Map Visuals")
+    local grassToggle = WorldBox:AddToggle("NoGrass",{Text="No Grass",Default=worldVisuals.noGrass,Callback=function(val)worldVisuals.noGrass=val end})
+    local leavesToggle = WorldBox:AddToggle("NoLeaves",{Text="No Leaves",Default=worldVisuals.noLeaves,Callback=function(val)worldVisuals.noLeaves=val end})
+    local cloudsToggle = WorldBox:AddToggle("Clouds",{Text="Clouds",Default=worldVisuals.clouds,Callback=function(val)worldVisuals.clouds=val end})
+    local cloudsColorPicker = cloudsToggle:AddColorPicker("CloudsColor",{Default=worldVisuals.cloudsColor,Callback=function(val)worldVisuals.cloudsColor=val end})
+    local ambientToggle = WorldBox:AddToggle("Ambient",{Text="Ambient",Default=worldVisuals.ambientEnabled,Callback=function(val)worldVisuals.ambientEnabled=val end})
+    local ambientColorPicker = ambientToggle:AddColorPicker("AmbientColor",{Default=worldVisuals.ambient,Callback=function(val)worldVisuals.ambient=val end})
+    local alwaysDayToggle = WorldBox:AddToggle("AlwaysDay",{Text="Always Day",Default=worldVisuals.alwaysDay,Callback=function(val)worldVisuals.alwaysDay=val end})
+    local removeFogToggle = WorldBox:AddToggle("RemoveFog",{Text="Remove Fog",Default=worldVisuals.removeFog,Callback=function(val)worldVisuals.removeFog=val end})
+    WorldBox:AddDropdown("SkyboxSelect",{
         Text="Skybox",
         Values={"Default","Delta","Black","TrollFace","Purple","Skeleton","Spooky scary","Night","SpongeBob Sad","Bikini Bottom"},
         Default="Default",
         Callback=function(val) worldVisuals.skybox=val; setSkybox(val) end
     })
+    WorldBox:AddToggle("BulletTrace",{Text="Bullet Trace",Default=false,Callback=function(val)traceSettings.enabled=val end}):AddColorPicker("BulletTraceColor",{Default=Color3.new(0,0.4,1),Title="Bullet Trace Color",Callback=function(val)traceSettings.color=val end})
+    WorldBox:AddDropdown("BulletTraceMode",{Values={"Neon","Lazer","ForceField"},Default="Lazer",Text="Bullet Trace Mode",Callback=function(val)traceSettings.mode=val end})
+    WorldBox:AddSlider("BulletTraceLifetime",{Text="Life time",Default=0.5,Min=0,Max=20,Rounding=2,Callback=function(val)traceSettings.lifetime=val end})
+    WorldBox:AddToggle("HitSound",{Text="Hit sound",Default=false,Callback=function(val)hitSoundSettings.enabled=val; updateHitSounds() end})
+    WorldBox:AddDropdown("HitSoundType",{Values={"Rust","Skeet","Sonic","Sonic Checkpoint","Oof","Windows XP Error","Punch","Buble","byebye","cowbell"},Default="Rust",Text="Hit sound type",Callback=function(val)hitSoundSettings.soundType=val; updateHitSounds() end})
+    WorldBox:AddToggle("Log",{Text="Log",Default=false,Callback=function(val)logSettings.enabled=val; if setupLogHooks then setupLogHooks() end end})
+    WorldBox:AddDropdown("LogTypes",{Values={"Kill log","Hit log"},Multi=true,Default={"Kill log","Hit log"},Text="Log Types",Callback=function(val)logSettings.types={};for k,v in pairs(val) do logSettings.types[k]=v end end})
 
     -- ESP UI
     EspBox:AddToggle("espEnabled",{Text="Enabled",Default=espSettings.enabled,Callback=function(val)espSettings.enabled=val end})
@@ -333,7 +357,6 @@ return function(VisualTab)
         Default = offscreenSettings.aicheck,
         Callback = function(val) offscreenSettings.aicheck = val end
     })
-
 ------------------------------------------------------------
 -- ЧАСТЬ 2. ЛОГИКА: Offscreen ESP (arrows, labels, очистка), No Grass, No Leaves, Clouds, Ambient, Always Day, Remove Fog, Skybox
 ------------------------------------------------------------
@@ -982,25 +1005,22 @@ game:GetService("RunService").RenderStepped:Connect(function()
 end)
 -- конец chams, дальше идёт BULLET TRACE
 ------------------------------------------------------------
--- BULLET TRACE Beam (Neon / Lazer / ForceField, плавный fade-out, без "кусков", Arrow + Bullet)
-------------------------------------------------------------
+-- === BULLET TRACE через Beam (Neon/Lazer/ForceField, плавный fade-out, без багов с кусками) ===
 local bulletTraces = {}
 local RunService = game:GetService("RunService")
 
--- Создаём плавный NumberSequence для прозрачности (fade-out)
-local function smoothFadeSequence()
-    local points = {}
-    for i = 0, 10 do
-        local k = i/10
-        local v = k < 0.95 and k*0.9 or 1
-        table.insert(points, NumberSequenceKeypoint.new(k, v))
-    end
-    table.insert(points, NumberSequenceKeypoint.new(1, 1))
-    return NumberSequence.new(points)
+local function fadeSequence(step)
+    -- step [0..1]; 0 = видно, 1 = прозрачно
+    return NumberSequence.new{
+        NumberSequenceKeypoint.new(0, step),
+        NumberSequenceKeypoint.new(0.7, math.max(step*0.6, step-0.3)),
+        NumberSequenceKeypoint.new(0.95, math.max(step*0.8, step-0.1)),
+        NumberSequenceKeypoint.new(1, 1)
+    }
 end
 
-local function createBeamTrace(startPos, endPos, color, mode, width, lifetime)
-    -- Attachments (не двигаем!)
+local function createBeamLaser(startPos, endPos, color, mode, width, lifetime)
+    -- Создание Attachments
     local partFrom = Instance.new("Part")
     partFrom.Anchored = true
     partFrom.CanCollide = false
@@ -1017,10 +1037,17 @@ local function createBeamTrace(startPos, endPos, color, mode, width, lifetime)
     partTo.Position = endPos
     partTo.Parent = workspace
 
-    local attFrom = Instance.new("Attachment", partFrom)
-    local attTo = Instance.new("Attachment", partTo)
+    local attFrom = Instance.new("Attachment")
+    attFrom.Parent = partFrom
+    local attTo = Instance.new("Attachment")
+    attTo.Parent = partTo
 
     local beams = {}
+
+    -- Настроим размеры под Neon меньше, как Lazer
+    local neonWidth = 0.12
+    local lazerWidth = 0.12
+    local forceFieldWidth = 0.12
 
     if mode == "Neon" then
         local beam = Instance.new("Beam")
@@ -1029,12 +1056,12 @@ local function createBeamTrace(startPos, endPos, color, mode, width, lifetime)
         beam.FaceCamera = false
         beam.Color = ColorSequence.new(color)
         beam.LightEmission = 1
-        beam.Width0 = width
-        beam.Width1 = width
-        beam.Transparency = smoothFadeSequence()
+        beam.Width0 = neonWidth
+        beam.Width1 = neonWidth
+        beam.Transparency = fadeSequence(0)
+        beam.Material = Enum.Material.Neon
         beam.CurveSize0 = 0
         beam.CurveSize1 = 0
-        beam.Material = Enum.Material.Neon
         beam.Parent = partFrom
         table.insert(beams, beam)
     elseif mode == "Lazer" then
@@ -1044,12 +1071,12 @@ local function createBeamTrace(startPos, endPos, color, mode, width, lifetime)
         beamGlow.FaceCamera = false
         beamGlow.Color = ColorSequence.new(color)
         beamGlow.LightEmission = 0.7
-        beamGlow.Width0 = width
-        beamGlow.Width1 = width
-        beamGlow.Transparency = smoothFadeSequence()
+        beamGlow.Width0 = lazerWidth
+        beamGlow.Width1 = lazerWidth
+        beamGlow.Transparency = fadeSequence(0)
+        beamGlow.Material = Enum.Material.Plastic
         beamGlow.CurveSize0 = 0
         beamGlow.CurveSize1 = 0
-        beamGlow.Material = Enum.Material.Neon
         beamGlow.Parent = partFrom
         table.insert(beams, beamGlow)
 
@@ -1059,12 +1086,12 @@ local function createBeamTrace(startPos, endPos, color, mode, width, lifetime)
         beamCore.FaceCamera = false
         beamCore.Color = ColorSequence.new(Color3.new(1,1,1))
         beamCore.LightEmission = 1
-        beamCore.Width0 = width*0.45
-        beamCore.Width1 = width*0.45
-        beamCore.Transparency = NumberSequence.new(0.05)
+        beamCore.Width0 = lazerWidth * 0.45
+        beamCore.Width1 = lazerWidth * 0.45
+        beamCore.Transparency = fadeSequence(0)
+        beamCore.Material = Enum.Material.Plastic
         beamCore.CurveSize0 = 0
         beamCore.CurveSize1 = 0
-        beamCore.Material = Enum.Material.Neon
         beamCore.Parent = partFrom
         table.insert(beams, beamCore)
     elseif mode == "ForceField" then
@@ -1073,39 +1100,37 @@ local function createBeamTrace(startPos, endPos, color, mode, width, lifetime)
         beamFF.Attachment1 = attTo
         beamFF.FaceCamera = false
         beamFF.Color = ColorSequence.new(color)
-        beamFF.LightEmission = 0.85
-        beamFF.Width0 = width
-        beamFF.Width1 = width
-        beamFF.Transparency = smoothFadeSequence()
+        beamFF.LightEmission = 0.9
+        beamFF.Width0 = forceFieldWidth
+        beamFF.Width1 = forceFieldWidth
+        beamFF.Transparency = fadeSequence(0)
+        beamFF.Material = Enum.Material.ForceField
         beamFF.CurveSize0 = 0
         beamFF.CurveSize1 = 0
-        beamFF.Material = Enum.Material.ForceField
         beamFF.Parent = partFrom
         table.insert(beams, beamFF)
     end
 
-    -- Fade-out через прозрачность
+    -- Плавный fade-out
     local fadeSteps = 30
     local fadeTime = lifetime or 0.5
     for i = 1, fadeSteps do
         task.delay((fadeTime/fadeSteps)*i, function()
             local t = i/fadeSteps
             for _,beam in ipairs(beams) do
-                if mode == "Neon" or mode == "ForceField" or (mode == "Lazer" and beam.Color.Keypoints[1].Value ~= Color3.new(1,1,1)) then
-                    beam.Transparency = smoothFadeSequence()
-                elseif mode == "Lazer" and beam.Color.Keypoints[1].Value == Color3.new(1,1,1) then
-                    beam.Transparency = NumberSequence.new(0.05 + 0.95*t)
-                end
+                beam.Transparency = fadeSequence(t)
             end
         end)
     end
+
+    -- Удаление после исчезновения
     task.delay(fadeTime + 0.05, function()
         if partFrom then partFrom:Destroy() end
         if partTo then partTo:Destroy() end
     end)
 end
 
-local function createBulletTrace(part)
+local function createBulletBeam(part)
     local prevPos = part.Position
     local conn
     local finished = false
@@ -1117,23 +1142,21 @@ local function createBulletTrace(part)
         end
         local currPos = part.Position
         if (currPos - prevPos).Magnitude > 0.01 then
-            local width = 0.12
-            createBeamTrace(prevPos, currPos, traceSettings.color, traceSettings.mode, width, traceSettings.lifetime)
+            createBeamLaser(prevPos, currPos, traceSettings.color, traceSettings.mode, 0.12, traceSettings.lifetime)
             prevPos = currPos
         end
     end
     conn = RunService.RenderStepped:Connect(drawTrace)
     part.Destroying:Connect(function()
         if not finished then
-            local width = 0.12
-            createBeamTrace(prevPos, part.Position, traceSettings.color, traceSettings.mode, width, traceSettings.lifetime)
+            createBeamLaser(prevPos, part.Position, traceSettings.color, traceSettings.mode, 0.12, traceSettings.lifetime)
             finished = true
             if conn then conn:Disconnect() end
         end
     end)
 end
 
-local function createArrowTrace(part)
+local function createArrowBeam(part)
     local prevPos = part.Position
     local conn
     local finished = false
@@ -1145,16 +1168,14 @@ local function createArrowTrace(part)
         end
         local currPos = part.Position
         if (currPos - prevPos).Magnitude > 0.01 then
-            local width = 0.12
-            createBeamTrace(prevPos, currPos, traceSettings.color, traceSettings.mode, width, traceSettings.lifetime)
+            createBeamLaser(prevPos, currPos, traceSettings.color, traceSettings.mode, 0.12, traceSettings.lifetime)
             prevPos = currPos
         end
     end
     conn = RunService.RenderStepped:Connect(drawTrace)
     part.Destroying:Connect(function()
         if not finished then
-            local width = 0.12
-            createBeamTrace(prevPos, part.Position, traceSettings.color, traceSettings.mode, width, traceSettings.lifetime)
+            createBeamLaser(prevPos, part.Position, traceSettings.color, traceSettings.mode, 0.12, traceSettings.lifetime)
             finished = true
             if conn then conn:Disconnect() end
         end
@@ -1168,12 +1189,12 @@ local function updateBulletTraces()
         if obj.Name == "Arrow" and traceSettings.enabled then
             if not bulletTraces[obj] then
                 bulletTraces[obj] = true
-                createArrowTrace(obj)
+                createArrowBeam(obj)
             end
         elseif obj.Name == "Bullet" and traceSettings.enabled then
             if not bulletTraces[obj] then
                 bulletTraces[obj] = true
-                createBulletTrace(obj)
+                createBulletBeam(obj)
             end
         end
     end
