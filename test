@@ -360,7 +360,7 @@ return function(VisualTab)
     })
 ------------------------------------------------------------
 -- ЧАСТЬ 2. ЛОГИКА: Offscreen ESP (arrows, labels, очистка), No Grass, No Leaves, Clouds, Ambient, Always Day, Remove Fog, Skybox
--- ОПТИМИЗИРОВАНО: если все выключено, НЕ вызываются тяжелые функции, throttle на обновление, Drawing создаются один раз
+-- + Object ESP оптимизированный, всё работает только если включено, throttle, кеш, Drawing не копятся
 ------------------------------------------------------------
 
 local Camera = workspace.CurrentCamera
@@ -369,83 +369,14 @@ local Lighting = game:GetService("Lighting")
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 
--- === Кэш стрелок и текстов для offscreen
+-- === OFFSCREEN ESP ===
 local offscreenArrows, offscreenOutlines, offscreenLabels = {}, {}, {}
+local lastOffscreenUpdate = 0
 
-local PlayerTable = nil
-do
-    for _, v in pairs(getgc(true)) do
-        if typeof(v) == "function" and islclosure(v) then
-            local info = debug.getinfo(v)
-            if info and tostring(info.name) == "updatePlayers" then
-                local ups = debug.getupvalues(v)
-                if type(ups[1]) == "table" and next(ups[1]) then
-                    PlayerTable = ups[1]
-                    break
-                end
-            end
-        end
-    end
-end
-
-local function SleepCheck(model)
-    local ac = model:FindFirstChild("AnimationController")
-    if not ac then return false end
-    for _, track in pairs(ac:GetPlayingAnimationTracks()) do
-        if track.IsPlaying and track.Animation.AnimationId == "rbxassetid://13280887764" then
-            return true
-        end
-    end
-    return false
-end
-
-local function GetPlayerNameForOffscreen(model)
-    local head = model:FindFirstChild("Head")
-    if head and head:FindFirstChild("Nametag") and head.Nametag:FindFirstChild("tag") then
-        local tag = head.Nametag.tag
-        if tag.Text == "Shylou2644" then return "AI" end
-        return tag.Text
-    end
-    return "Player"
-end
-
-local function GetPlayerWeaponType(char)
-    local head = char:FindFirstChild("Head")
-    if head and head:FindFirstChild("Nametag") and head.Nametag:FindFirstChild("tag") then
-        local tag = head.Nametag.tag
-        if tag.Text == "Shylou2644" then
-            local handModel = char:FindFirstChild("HandModel")
-            if handModel and handModel:GetAttribute("name") then
-                return tostring(handModel:GetAttribute("name"))
-            else
-                return "None"
-            end
-        end
-    end
-    if not PlayerTable then return "None" end
-    for _, entry in pairs(PlayerTable) do
-        if entry and entry.model == char then
-            if entry.equippedItem and entry.equippedItem.type and entry.equippedItem.type ~= "" then
-                return tostring(entry.equippedItem.type)
-            else
-                return "None"
-            end
-        end
-    end
-    return "None"
-end
-
-local function getScreenCenter()
-    local v = Camera.ViewportSize
-    return v.X / 2, v.Y / 2
-end
-
-local function lerpColor(a, b, t)
-    return Color3.new(
-        a.r + (b.r - a.r) * t,
-        a.g + (b.g - a.g) * t,
-        a.b + (b.b - a.b) * t
-    )
+local function clearOffscreenDrawings()
+    for i, obj in pairs(offscreenArrows) do if obj then obj.Visible = false end end
+    for i, obj in pairs(offscreenOutlines) do if obj then obj.Visible = false end end
+    for i, obj in pairs(offscreenLabels) do if obj then obj.Visible = false end end
 end
 
 local function getOffscreenTargets()
@@ -457,18 +388,16 @@ local function getOffscreenTargets()
             if head and root then
                 local dist = (Camera.CFrame.Position - root.Position).Magnitude
                 if dist <= offscreenSettings.maxDist then
-                    local name = GetPlayerNameForOffscreen(model)
+                    local name = (function()
+                        local tag = head:FindFirstChild("Nametag") and head.Nametag:FindFirstChild("tag")
+                        return tag and tag.Text or "Player"
+                    end)()
                     local isAI = (offscreenSettings.aicheck and name == "AI")
-                    local isSleep = (offscreenSettings.sleepcheck and SleepCheck(model))
+                    local isSleep = (offscreenSettings.sleepcheck and (model:FindFirstChild("AnimationController") and model.AnimationController:GetPlayingAnimationTracks()[1] and model.AnimationController:GetPlayingAnimationTracks()[1].Animation.AnimationId == "rbxassetid://13280887764"))
                     if not isAI and not isSleep then
                         local vec, onScreen = Camera:WorldToViewportPoint(root.Position)
                         if not onScreen or vec.Z < 0 then
-                            table.insert(result, {
-                                model = model,
-                                position = root.Position,
-                                dist = dist,
-                                name = name
-                            })
+                            table.insert(result, {model = model, position = root.Position, dist = dist, name = name})
                         end
                     end
                 end
@@ -479,50 +408,32 @@ local function getOffscreenTargets()
     return result
 end
 
-local function clearOffscreenDrawings()
-    for i, obj in pairs(offscreenArrows) do if obj then obj.Visible = false end end
-    for i, obj in pairs(offscreenOutlines) do if obj then obj.Visible = false end end
-    for i, obj in pairs(offscreenLabels) do if obj then obj.Visible = false end end
-end
-
-local lastOffscreenUpdate = 0
 RunService.RenderStepped:Connect(function()
-    if not offscreenSettings.enabled then
+    if not offscreenSettings.enabled or not offscreenSettings.arrow then
         clearOffscreenDrawings()
         return
     end
-    -- throttle
-    if tick() - lastOffscreenUpdate < 0.04 then
-        return
-    end
+    if tick() - lastOffscreenUpdate < 0.04 then return end
     lastOffscreenUpdate = tick()
-    if not offscreenSettings.arrow then
-        clearOffscreenDrawings()
-        return
-    end
     local targets = getOffscreenTargets()
     for i = #targets + 1, #offscreenArrows do
         if offscreenArrows[i] then offscreenArrows[i].Visible = false end
         if offscreenOutlines[i] then offscreenOutlines[i].Visible = false end
         if offscreenLabels[i] then offscreenLabels[i].Visible = false end
     end
-
-    local cx, cy = getScreenCenter()
+    local cx, cy = Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2
     for i, target in ipairs(targets) do
         local camPos = Camera.CFrame.Position
         local dir = (target.position - camPos).Unit
         local look = Camera.CFrame.LookVector
         local right = Camera.CFrame.RightVector
         local angle = math.atan2(dir:Dot(right), dir:Dot(look))
-
         local posX = cx + math.sin(angle) * offscreenSettings.circleRadius
         local posY = cy - math.cos(angle) * offscreenSettings.circleRadius
-
         local t = math.clamp((target.dist / offscreenSettings.maxDist), 0, 1)
-        local thisColor = offscreenSettings.arrowColor or lerpColor(Color3.fromRGB(255, 200, 60), Color3.fromRGB(255, 70, 70), t)
+        local thisColor = offscreenSettings.arrowColor or Color3.fromRGB(255, 200, 60):Lerp(Color3.fromRGB(255, 70, 70), t)
         local arrowSize = offscreenSettings.arrowSize
-
-        -- Black outline
+        -- Outline
         if not offscreenOutlines[i] then
             local outline = Drawing.new("Triangle")
             outline.Filled = true
@@ -537,8 +448,7 @@ RunService.RenderStepped:Connect(function()
         outline.PointB = Vector2.new(posX + math.sin(angle + math.rad(120)) * outlineSize, posY - math.cos(angle + math.rad(120)) * outlineSize)
         outline.PointC = Vector2.new(posX + math.sin(angle - math.rad(120)) * outlineSize, posY - math.cos(angle - math.rad(120)) * outlineSize)
         outline.Visible = true
-
-        -- Arrow itself
+        -- Arrow
         if not offscreenArrows[i] then
             local arrow = Drawing.new("Triangle")
             arrow.Filled = true
@@ -555,19 +465,11 @@ RunService.RenderStepped:Connect(function()
         arrow.Color = thisColor
         arrow.Transparency = 0.85
         arrow.Visible = true
-
-        -- Текстовая подпись
+        -- Label
         local lblStr = ""
-        if offscreenSettings.name then
-            lblStr = target.name
-        end
-        if offscreenSettings.distance then
-            lblStr = lblStr .. ((lblStr~="") and " [" or "[") .. tostring(math.floor(target.dist)) .. "m]"
-        end
-        if offscreenSettings.weapon then
-            local weap = GetPlayerWeaponType(target.model)
-            lblStr = lblStr .. "\n" .. (weap or "None")
-        end
+        if offscreenSettings.name then lblStr = target.name end
+        if offscreenSettings.distance then lblStr = lblStr .. ((lblStr~="") and " [" or "[") .. tostring(math.floor(target.dist)) .. "m]" end
+        if offscreenSettings.weapon then lblStr = lblStr .. "\n" .. tostring(GetPlayerWeaponType and GetPlayerWeaponType(target.model) or "None") end
         if lblStr ~= "" then
             if not offscreenLabels[i] then
                 local label = Drawing.new("Text")
@@ -587,9 +489,10 @@ RunService.RenderStepped:Connect(function()
         end
     end
 end)
+
 ------------------------------------------------------------
--- WORLD VISUALS LOGIC (No Grass, No Leaves, Clouds, Ambient, Always Day, Remove Fog, Skybox)
--- ОПТИМИЗИРОВАНО: ничего не вызывается если всё выключено, throttle на удаление, подписки только по включению
+-- WORLD VISUALS (No Grass, No Leaves, Clouds, Ambient, Always Day, Remove Fog, Skybox)
+-- Всё работает только если включено
 ------------------------------------------------------------
 
 local terrain = nil
@@ -646,9 +549,6 @@ local function setClouds(enabled, color)
     if not cloudsObject then
         cloudsObject = Instance.new("Clouds")
         cloudsObject.Parent = terrain
-    end
-    if not oldCloudsProps.color then
-        oldCloudsProps.color = cloudsObject.Color
     end
     cloudsObject.Enabled = true
     cloudsObject.Color = color or worldVisuals.cloudsColor
@@ -799,12 +699,141 @@ ambientColorPicker:OnChanged(function(val)
 end)
 
 ------------------------------------------------------------
--- ЧАСТЬ 3. ЛОГИКА: CHAMS, Bullet Trace, HitSound, Logs, SafeZone Chams, очистка при выгрузке
+-- OBJECT ESP ОПТИМИЗИРОВАННЫЙ
 ------------------------------------------------------------
 
--- === CHAMS (Руки и предметы) ===
--- === CHAMS (Руки и предметы, один colorpicker на всё) ===
-local originalHandProps, originalItemProps = {}, {}
+local objectEspLabels = {} -- {id = Drawing text}
+local lastObjectEspUpdate = 0
+
+local function getEntityMap()
+    for _, v in pairs(getgc(true)) do
+        if typeof(v) == "table" and rawget(v, "EntityMap") then
+            return v.EntityMap
+        end
+    end
+end
+
+local function cleanupLabels(tbl)
+    for k, v in pairs(tbl) do
+        if v then
+            v.Visible = false
+            v:Remove()
+            tbl[k] = nil
+        end
+    end
+end
+
+local function objectEspUpdate()
+    if not objectEspSettings.enabled then
+        cleanupLabels(objectEspLabels)
+        return
+    end
+    if tick() - lastObjectEspUpdate < 0.15 then return end
+    lastObjectEspUpdate = tick()
+    local entityMap = getEntityMap()
+    if not entityMap then cleanupLabels(objectEspLabels) return end
+    local Camera = workspace.CurrentCamera
+    local seen = {}
+    for id, entity in pairs(entityMap) do
+        local show = false
+        local color = nil
+        local labelText = nil
+        local screenPos, onScreen = nil, false
+        local dist = entity.pos and (Camera.CFrame.Position - entity.pos).Magnitude or math.huge
+        if entity.type == "DroppedItem" and objectEspSettings.dropped.enabled and dist <= objectEspSettings.maxDistance then
+            show = true
+            color = objectEspSettings.dropped.color
+            labelText = (objectEspSettings.name and (entity.item or "Dropped") or "")
+            if objectEspSettings.distance then
+                labelText = (labelText~="" and labelText.." " or "") .. tostring(math.floor(dist)).."m"
+            end
+        elseif entity.type == "Corpse" and objectEspSettings.corpse.enabled and dist <= objectEspSettings.maxDistance then
+            show = true
+            color = objectEspSettings.corpse.color
+            labelText = "Corpse"
+            if objectEspSettings.distance then
+                labelText = labelText.." "..tostring(math.floor(dist)).."m"
+            end
+        elseif entity.type == "ATV" and objectEspSettings.atv.enabled and dist <= objectEspSettings.maxDistance then
+            show = true
+            color = objectEspSettings.atv.color
+            labelText = "ATV"
+            if objectEspSettings.distance then
+                labelText = labelText.." "..tostring(math.floor(dist)).."m"
+            end
+        elseif entity.type == "Stone" and objectEspSettings.stone.enabled and dist <= objectEspSettings.maxDistance then
+            show = true
+            color = objectEspSettings.stone.color
+            labelText = "Stone"
+            if objectEspSettings.distance then
+                labelText = labelText.." "..tostring(math.floor(dist)).."m"
+            end
+        elseif entity.type == "Nitrate" and objectEspSettings.nitrate.enabled and dist <= objectEspSettings.maxDistance then
+            show = true
+            color = objectEspSettings.nitrate.color
+            labelText = "Nitrate"
+            if objectEspSettings.distance then
+                labelText = labelText.." "..tostring(math.floor(dist)).."m"
+            end
+        elseif entity.type == "Iron" and objectEspSettings.iron.enabled and dist <= objectEspSettings.maxDistance then
+            show = true
+            color = objectEspSettings.iron.color
+            labelText = "Iron"
+            if objectEspSettings.distance then
+                labelText = labelText.." "..tostring(math.floor(dist)).."m"
+            end
+        elseif entity.type == "Copter" and objectEspSettings.copter.enabled and dist <= objectEspSettings.maxDistance then
+            show = true
+            color = objectEspSettings.copter.color
+            labelText = "Copter"
+            if objectEspSettings.distance then
+                labelText = labelText.." "..tostring(math.floor(dist)).."m"
+            end
+        elseif entity.type == "Car" and objectEspSettings.car.enabled and dist <= objectEspSettings.maxDistance then
+            show = true
+            color = objectEspSettings.car.color
+            labelText = "Car"
+            if objectEspSettings.distance then
+                labelText = labelText.." "..tostring(math.floor(dist)).."m"
+            end
+        end
+        if show and entity.pos then
+            seen[id] = true
+            if not objectEspLabels[id] then
+                local label = Drawing.new("Text")
+                label.Size = 13
+                label.Outline = true
+                label.Center = true
+                objectEspLabels[id] = label
+            end
+            local label = objectEspLabels[id]
+            screenPos, onScreen = Camera:WorldToViewportPoint(entity.pos)
+            label.Visible = onScreen
+            label.Text = labelText
+            label.Position = Vector2.new(screenPos.X, screenPos.Y)
+            label.Color = color
+        else
+            if objectEspLabels[id] then objectEspLabels[id].Visible = false end
+        end
+    end
+    for id, label in pairs(objectEspLabels) do
+        if not seen[id] then
+            label.Visible = false
+            label:Remove()
+            objectEspLabels[id] = nil
+        end
+    end
+end
+
+RunService.RenderStepped:Connect(objectEspUpdate)
+
+------------------------------------------------------------
+-- CHAMS (FPSArms/HandModel) ОПТИМИЗИРОВАННЫЙ
+------------------------------------------------------------
+
+local lastHandModelId = nil
+local lastChamsUpdate = 0
+local origHandProps = {}
 
 local function applyHighlight(part, color)
     for _, v in ipairs(part:GetChildren()) do
@@ -826,168 +855,104 @@ local function removeHighlights(part)
     end
 end
 
-local function isInIgnore(obj)
-    local ignore = workspace:FindFirstChild("Const") and workspace.Const:FindFirstChild("Ignore")
-    if not ignore then return false end
-    return obj and obj.Parent == ignore
-end
-
-local function applyItemChams(obj)
-    local id = obj:GetDebugId()
-    if isInIgnore(obj) and (obj.Name == "Arrow" or obj.Name == "Bullet") then return end
-    if chamsSettings.item then
-        if not originalItemProps[id] then
-            originalItemProps[id] = {Material=obj.Material, Color=obj.Color}
-        end
-        obj.Material = originalItemProps[id].Material
-        obj.Color = originalItemProps[id].Color
-        removeHighlights(obj)
-        if chamsSettings.itemMat == "Chams" then
-            applyHighlight(obj, chamsSettings.itemColor)
-        else
-            obj.Material = Enum.Material[chamsSettings.itemMat]
-            obj.Color = chamsSettings.itemColor
-        end
-    else
-        local old = originalItemProps[id]
-        if old then
-            obj.Material = old.Material
-            obj.Color = old.Color
-            originalItemProps[id] = nil
-        end
-        removeHighlights(obj)
-    end
-end
-
-local function recurseItemChams(obj)
-    if obj:IsA("BasePart") or obj:IsA("MeshPart") then
-        applyItemChams(obj)
-    end
-    for _, child in ipairs(obj:GetChildren()) do
-        recurseItemChams(child)
-    end
-end
-
-local function updateIgnoreChams()
-    local ignore = workspace:FindFirstChild("Const") and workspace.Const:FindFirstChild("Ignore")
-    if not ignore then return end
-    for _, obj in ipairs(ignore:GetChildren()) do
-        if obj.Name ~= "FPSArms" and obj.Name ~= "LocalCharacter" then
-            recurseItemChams(obj)
-        end
-    end
-end
-
-local function updateFPSArmsHandModelChams()
-    local ignore = workspace:FindFirstChild("Const") and workspace.Const:FindFirstChild("Ignore")
+local function updateHandChams()
+    if not (chamsSettings.hand) then return end
+    if tick() - lastChamsUpdate < 0.3 then return end
+    lastChamsUpdate = tick()
+    local ignore = workspace:FindFirstChild("Const")
+    ignore = ignore and ignore:FindFirstChild("Ignore")
     local fpsarms = ignore and ignore:FindFirstChild("FPSArms")
     if not fpsarms then return end
     local handModel = fpsarms:FindFirstChild("HandModel")
-    if handModel then
-        recurseItemChams(handModel)
-    end
-    fpsarms.ChildAdded:Connect(function(child)
-        if child.Name == "HandModel" then
-            recurseItemChams(child)
+    if not handModel then return end
+    local currId = handModel:GetDebugId()
+    if currId ~= lastHandModelId then
+        -- HandModel сменился, чистим старое
+        for id, props in pairs(origHandProps) do
+            for _, part in ipairs(props.parts) do
+                if part and part:IsA("BasePart") then
+                    part.Material = props.material
+                    part.Color = props.color
+                    removeHighlights(part)
+                end
+            end
+            origHandProps[id] = nil
         end
-    end)
+        lastHandModelId = currId
+        origHandProps[currId] = {parts={}, material=nil, color=nil}
+        for _, part in ipairs(handModel:GetChildren()) do
+            if part:IsA("BasePart") then
+                origHandProps[currId].parts[#origHandProps[currId].parts+1] = part
+                origHandProps[currId].material = part.Material
+                origHandProps[currId].color = part.Color
+            end
+        end
+    end
+    for _, part in ipairs(handModel:GetChildren()) do
+        if part:IsA("BasePart") then
+            removeHighlights(part)
+            if chamsSettings.handMat == "Chams" then
+                applyHighlight(part, chamsSettings.handColor)
+            else
+                part.Material = Enum.Material[chamsSettings.handMat]
+                part.Color = chamsSettings.handColor
+            end
+        end
+    end
 end
+
+local lastItemChamsUpdate = 0
+local origItemProps = {}
 
 local function updateItemChams()
-    updateIgnoreChams()
-    updateFPSArmsHandModelChams()
-end
-
-workspace.ChildAdded:Connect(function(child)
-    if child.Name == "Const" then
-        local ignore = child:WaitForChild("Ignore", 5)
-        if ignore then
-            ignore.ChildAdded:Connect(function(obj)
-                updateItemChams()
-            end)
-        end
-    end
-end)
-
-workspace.DescendantAdded:Connect(function(child)
-    if child and child.Parent and child.Parent.Name == "FPSArms" and child.Name == "HandModel" then
-        updateItemChams()
-    end
-end)
-
-local function updateHandChams()
-    local arms = workspace:FindFirstChild("Const")
-    arms = arms and arms:FindFirstChild("Ignore")
-    arms = arms and arms:FindFirstChild("FPSArms")
-    if not arms then return end
-    local handNames = {"LeftHand", "RightHand"}
-    for _, name in ipairs(handNames) do
-        local hand = arms:FindFirstChild(name)
-        if hand and hand:IsA("MeshPart") then
-            local id = hand:GetDebugId()
-            if chamsSettings.hand then
-                if not originalHandProps[id] then
-                    originalHandProps[id] = {Material=hand.Material, Color=hand.Color}
-                end
-                hand.Material = originalHandProps[id].Material
-                hand.Color = originalHandProps[id].Color
-                removeHighlights(hand)
-                if chamsSettings.handMat == "Chams" then
-                    applyHighlight(hand, chamsSettings.handColor)
-                else
-                    hand.Material = Enum.Material[chamsSettings.handMat]
-                    hand.Color = chamsSettings.handColor
-                end
+    if not (chamsSettings.item) then return end
+    if tick() - lastItemChamsUpdate < 0.3 then return end
+    lastItemChamsUpdate = tick()
+    local ignore = workspace:FindFirstChild("Const")
+    ignore = ignore and ignore:FindFirstChild("Ignore")
+    if not ignore then return end
+    for _, obj in ipairs(ignore:GetChildren()) do
+        if obj:IsA("BasePart") or obj:IsA("MeshPart") then
+            local id = obj:GetDebugId()
+            if not origItemProps[id] then
+                origItemProps[id] = {material=obj.Material, color=obj.Color}
+            end
+            removeHighlights(obj)
+            if chamsSettings.itemMat == "Chams" then
+                applyHighlight(obj, chamsSettings.itemColor)
             else
-                local old = originalHandProps[id]
-                if old then
-                    hand.Material = old.Material
-                    hand.Color = old.Color
-                    originalHandProps[id] = nil
-                end
-                removeHighlights(hand)
-            end
-        end
-    end
-    local fake = arms:FindFirstChild("Fake")
-    if fake then
-        local fakeNames = {"c_LeftLowerArm", "c_RightLowerArm"}
-        for _, name in ipairs(fakeNames) do
-            local limb = fake:FindFirstChild(name)
-            if limb and limb:IsA("MeshPart") then
-                local id = limb:GetDebugId()
-                if chamsSettings.hand then
-                    if not originalHandProps[id] then
-                        originalHandProps[id] = {Material=limb.Material, Color=limb.Color}
-                    end
-                    limb.Material = originalHandProps[id].Material
-                    limb.Color = originalHandProps[id].Color
-                    removeHighlights(limb)
-                    if chamsSettings.handMat == "Chams" then
-                        applyHighlight(limb, chamsSettings.handColor)
-                    else
-                        limb.Material = Enum.Material[chamsSettings.handMat]
-                        limb.Color = chamsSettings.handColor
-                    end
-                else
-                    local old = originalHandProps[id]
-                    if old then
-                        limb.Material = old.Material
-                        limb.Color = old.Color
-                        originalHandProps[id] = nil
-                    end
-                    removeHighlights(limb)
-                end
+                obj.Material = Enum.Material[chamsSettings.itemMat]
+                obj.Color = chamsSettings.itemColor
             end
         end
     end
 end
 
-game:GetService("RunService").RenderStepped:Connect(function()
-    updateItemChams()
-    updateHandChams()
+RunService.RenderStepped:Connect(function()
+    if chamsSettings.hand then updateHandChams() end
+    if chamsSettings.item then updateItemChams() end
 end)
--- конец chams, дальше идёт BULLET TRACE
+
+getgenv().TridentLibrary:OnUnload(function()
+    -- HandModel
+    for id, props in pairs(origHandProps) do
+        for _, part in ipairs(props.parts) do
+            if part and part:IsA("BasePart") then
+                part.Material = props.material
+                part.Color = props.color
+                removeHighlights(part)
+            end
+        end
+        origHandProps[id] = nil
+    end
+    -- Item
+    for id, props in pairs(origItemProps) do
+        origItemProps[id] = nil
+    end
+    -- Object ESP
+    cleanupLabels(objectEspLabels)
+end)
+
 ------------------------------------------------------------
 -- BULLET TRACE через Beam (tail fade-out без кусков, плавно, Neon/Lazer, фикс лимита кейпоинтов)
 ------------------------------------------------------------
