@@ -735,78 +735,59 @@ local function setSkybox(name)
     end
 end
 
-print("[UI] Начинается блок подключения UI событий (World Visuals)")
 
 -- ЧЕКБОКСЫ: только boolean
-print("[LOG] grassToggle:SetValue - type:", typeof(worldVisuals.noGrass), "value:", worldVisuals.noGrass)
 grassToggle:SetValue(worldVisuals.noGrass)
 grassToggle:OnChanged(function(val)
-    print("[LOG] grassToggle:OnChanged, val:", val)
     worldVisuals.noGrass = val
     setGrassEnabled(not val)
 end)
 
-print("[LOG] leavesToggle:SetValue - type:", typeof(worldVisuals.noLeaves), "value:", worldVisuals.noLeaves)
 leavesToggle:SetValue(worldVisuals.noLeaves)
 leavesToggle:OnChanged(function(val)
-    print("[LOG] leavesToggle:OnChanged, val:", val)
     worldVisuals.noLeaves = val
     leavesWatcher()
 end)
 
-print("[LOG] cloudsToggle:SetValue - type:", typeof(worldVisuals.clouds), "value:", worldVisuals.clouds)
 cloudsToggle:SetValue(worldVisuals.clouds)
 cloudsToggle:OnChanged(function(val)
-    print("[LOG] cloudsToggle:OnChanged, val:", val, "worldVisuals.cloudsColor:", worldVisuals.cloudsColor)
     worldVisuals.clouds = val
     setClouds(val, worldVisuals.cloudsColor)
 end)
 
-print("[LOG] ambientToggle:SetValue - type:", typeof(worldVisuals.ambientEnabled), "value:", worldVisuals.ambientEnabled)
 ambientToggle:SetValue(worldVisuals.ambientEnabled)
 ambientToggle:OnChanged(function(val)
-    print("[LOG] ambientToggle:OnChanged, val:", val, "worldVisuals.ambient:", worldVisuals.ambient)
     worldVisuals.ambientEnabled = val
     -- ВАЖНО: только Color3!
     if typeof(worldVisuals.ambient) ~= "Color3" then
-        print("[ERROR] worldVisuals.ambient не Color3! Значение:", worldVisuals.ambient)
         worldVisuals.ambient = Color3.fromRGB(120,120,120)
     end
     setAmbient(val, worldVisuals.ambient)
 end)
 
-print("[LOG] alwaysDayToggle:SetValue - type:", typeof(worldVisuals.alwaysDay), "value:", worldVisuals.alwaysDay)
 alwaysDayToggle:SetValue(worldVisuals.alwaysDay)
 alwaysDayToggle:OnChanged(function(val)
-    print("[LOG] alwaysDayToggle:OnChanged, val:", val)
     worldVisuals.alwaysDay = val
     setAlwaysDay(val)
 end)
 
-print("[LOG] removeFogToggle:SetValue - type:", typeof(worldVisuals.removeFog), "value:", worldVisuals.removeFog)
 removeFogToggle:SetValue(worldVisuals.removeFog)
 removeFogToggle:OnChanged(function(val)
-    print("[LOG] removeFogToggle:OnChanged, val:", val)
     worldVisuals.removeFog = val
     setRemoveFog(val)
 end)
 
-print("[LOG] cloudsColorPicker:OnChanged will be set")
 cloudsColorPicker:OnChanged(function(val)
-    print("[LOG] cloudsColorPicker:OnChanged, val:", val)
     worldVisuals.cloudsColor = val
     if worldVisuals.clouds then
         setClouds(true, val)
     end
 end)
 
-print("[LOG] ambientColorPicker:OnChanged will be set")
 ambientColorPicker:OnChanged(function(val)
-    print("[LOG] ambientColorPicker:OnChanged, val:", val)
     worldVisuals.ambient = val
     -- ВАЖНО: только Color3!
     if typeof(val) ~= "Color3" then
-        print("[ERROR] ambientColorPicker вернул не Color3! Значение:", val)
         worldVisuals.ambient = Color3.fromRGB(120,120,120)
     end
     if worldVisuals.ambientEnabled then
@@ -814,7 +795,6 @@ ambientColorPicker:OnChanged(function(val)
     end
 end)
 
-print("[UI] Конец блока подключения UI событий (World Visuals)")
 ------------------------------------------------------------
 -- ЧАСТЬ 3. ЛОГИКА: CHAMS, Bullet Trace, HitSound, Logs, SafeZone Chams, очистка при выгрузке
 ------------------------------------------------------------
