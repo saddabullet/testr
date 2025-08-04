@@ -1006,44 +1006,80 @@ game:GetService("RunService").RenderStepped:Connect(function()
 end)
 -- конец chams, дальше идёт BULLET TRACE
 ------------------------------------------------------------
--- BULLET TRACE (Laser/Neon, двойная линия: белое внутри, цвет снаружи) -- исправлено!
+-- BULLET TRACE через Beam (3D Laser/Neon, с LifeTime, цвет, ширина)
 ------------------------------------------------------------
 local bulletTraces = {}
 
-local function drawLaserLine(startPos, endPos, color, mode, life)
-    local Camera = workspace.CurrentCamera
-    local screenFrom, onScreenFrom = Camera:WorldToViewportPoint(startPos)
-    local screenTo, onScreenTo = Camera:WorldToViewportPoint(endPos)
-    -- Проверяем, что хотя бы одна точка на экране
-    if not (onScreenFrom or onScreenTo) then return end
+local function createBeam(startPos, endPos, color, mode, width, life)
+    -- Создание Attachments
+    local partFrom = Instance.new("Part")
+    partFrom.Anchored = true
+    partFrom.CanCollide = false
+    partFrom.Transparency = 1
+    partFrom.Size = Vector3.new(0.1,0.1,0.1)
+    partFrom.Position = startPos
+    partFrom.Parent = workspace
 
-    -- Glow (outline) линия (цвет выбран игроком)
-    local glow = Drawing.new("Line")
-    glow.From = Vector2.new(screenFrom.X, screenFrom.Y)
-    glow.To = Vector2.new(screenTo.X, screenTo.Y)
-    glow.Color = color
-    glow.Thickness = (mode == "Neon") and 7 or 5.5
-    glow.Transparency = (mode == "Neon") and 0.9 or 0.7
-    glow.Visible = true
+    local partTo = Instance.new("Part")
+    partTo.Anchored = true
+    partTo.CanCollide = false
+    partTo.Transparency = 1
+    partTo.Size = Vector3.new(0.1,0.1,0.1)
+    partTo.Position = endPos
+    partTo.Parent = workspace
 
-    -- Core (центр) линия (белая)
-    local core = Drawing.new("Line")
-    core.From = Vector2.new(screenFrom.X, screenFrom.Y)
-    core.To = Vector2.new(screenTo.X, screenTo.Y)
-    core.Color = Color3.new(1,1,1)
-    core.Thickness = (mode == "Neon") and 3.5 or 2.7
-    core.Transparency = 1
-    core.Visible = true
+    local attFrom = Instance.new("Attachment")
+    attFrom.Parent = partFrom
+    local attTo = Instance.new("Attachment")
+    attTo.Parent = partTo
 
+    -- Beam
+    local beam = Instance.new("Beam")
+    beam.Attachment0 = attFrom
+    beam.Attachment1 = attTo
+    beam.FaceCamera = true
+    beam.Color = ColorSequence.new(color)
+    beam.LightEmission = (mode == "Neon") and 1 or 0.6
+    beam.Transparency = NumberSequence.new({
+        NumberSequenceKeypoint.new(0, 0),
+        NumberSequenceKeypoint.new(0.8, 0.2),
+        NumberSequenceKeypoint.new(1, 1)
+    })
+    beam.Width0 = width
+    beam.Width1 = width
+    beam.Parent = partFrom
+
+    -- Для красивого Neon/Lazer эффекта можно сделать Beam с белым внутренним Core (доп. Beam)
+    if mode == "Lazer" or mode == "Neon" then
+        local beamCore = Instance.new("Beam")
+        beamCore.Attachment0 = attFrom
+        beamCore.Attachment1 = attTo
+        beamCore.FaceCamera = true
+        beamCore.Color = ColorSequence.new(Color3.new(1,1,1))
+        beamCore.LightEmission = 1
+        beamCore.Transparency = NumberSequence.new(0.15)
+        beamCore.Width0 = width * 0.45
+        beamCore.Width1 = width * 0.45
+        beamCore.Parent = partFrom
+    end
+
+    -- Удаление
     task.delay(life or 0.5, function()
-        glow.Visible = false
-        glow:Remove()
-        core.Visible = false
-        core:Remove()
+        if partFrom then partFrom:Destroy() end
+        if partTo then partTo:Destroy() end
     end)
 end
 
-local function createBulletLaser(part)
+local function getStartAndEnd(part)
+    -- Начальная точка — позиция part на момент создания или позиция дула, если есть
+    local startPos = part.Position
+    -- Конечная точка — позиция на каждом кадре, либо точка попадания (если можешь определить)
+    -- Здесь просто берём текущую позицию
+    local endPos = part.Position
+    return startPos, endPos
+end
+
+local function createBulletBeam(part)
     local prevPos = part.Position
     local conn
     local finished = false
@@ -1055,21 +1091,21 @@ local function createBulletLaser(part)
         end
         local currPos = part.Position
         if (currPos - prevPos).Magnitude > 0.01 then
-            drawLaserLine(prevPos, currPos, traceSettings.color, traceSettings.mode, traceSettings.lifetime)
+            createBeam(prevPos, currPos, traceSettings.color, traceSettings.mode, traceSettings.mode == "Neon" and 0.25 or 0.16, traceSettings.lifetime)
             prevPos = currPos
         end
     end
     conn = game:GetService("RunService").RenderStepped:Connect(drawTrace)
     part.Destroying:Connect(function()
         if not finished then
-            drawLaserLine(prevPos, part.Position, traceSettings.color, traceSettings.mode, traceSettings.lifetime)
+            createBeam(prevPos, part.Position, traceSettings.color, traceSettings.mode, traceSettings.mode == "Neon" and 0.25 or 0.16, traceSettings.lifetime)
             finished = true
             if conn then conn:Disconnect() end
         end
     end)
 end
 
-local function createArrowLaser(part)
+local function createArrowBeam(part)
     local prevPos = part.Position
     local conn
     local finished = false
@@ -1081,14 +1117,14 @@ local function createArrowLaser(part)
         end
         local currPos = part.Position
         if (currPos - prevPos).Magnitude > 0.01 then
-            drawLaserLine(prevPos, currPos, traceSettings.color, traceSettings.mode, traceSettings.lifetime)
+            createBeam(prevPos, currPos, traceSettings.color, traceSettings.mode, traceSettings.mode == "Neon" and 0.25 or 0.16, traceSettings.lifetime)
             prevPos = currPos
         end
     end
     conn = game:GetService("RunService").RenderStepped:Connect(drawTrace)
     part.Destroying:Connect(function()
         if not finished then
-            drawLaserLine(prevPos, part.Position, traceSettings.color, traceSettings.mode, traceSettings.lifetime)
+            createBeam(prevPos, part.Position, traceSettings.color, traceSettings.mode, traceSettings.mode == "Neon" and 0.25 or 0.16, traceSettings.lifetime)
             finished = true
             if conn then conn:Disconnect() end
         end
@@ -1102,12 +1138,12 @@ local function updateBulletTraces()
         if obj.Name == "Arrow" and traceSettings.enabled then
             if not bulletTraces[obj] then
                 bulletTraces[obj] = true
-                createArrowLaser(obj)
+                createArrowBeam(obj)
             end
         elseif obj.Name == "Bullet" and traceSettings.enabled then
             if not bulletTraces[obj] then
                 bulletTraces[obj] = true
-                createBulletLaser(obj)
+                createBulletBeam(obj)
             end
         end
     end
