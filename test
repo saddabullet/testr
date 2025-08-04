@@ -53,7 +53,6 @@ return function(VisualTab)
         transparency = 75,
         color = Color3.fromRGB(255, 0, 0)
     }
-    local outlineColor = Color3.fromRGB(0,0,0)
     local chamsSettings = {
         hand = false,
         handColor = Color3.new(1, 1, 1),
@@ -64,9 +63,9 @@ return function(VisualTab)
     }
     local traceSettings = {
         enabled = false,
-        color = Color3.new(1, 1, 1),
-        mode = "Lazer", -- Default only Neon/Lazer, Legit убран
-        lifetime = 0.5, -- default seconds
+        color = Color3.new(0, 0.7, 1),
+        mode = "Lazer", -- Neon / Lazer / ForceField
+        lifetime = 0.5,
     }
     local logSettings = {
         enabled = false,
@@ -87,18 +86,9 @@ return function(VisualTab)
         removeFog = false,
         skybox = "Default"
     }
-
     local skyboxes = {
-        ["Default"] = {SkyboxBk = "rbxassetid://401664839", SkyboxDn = "rbxassetid://401664862", SkyboxFt = "rbxassetid://401664936", SkyboxLf = "rbxassetid://401664881", SkyboxRt = "rbxassetid://401664929", SkyboxUp = "rbxassetid://401664883"},
-        ["Delta"] = {SkyboxBk = "rbxassetid://117012443612361", SkyboxDn = "rbxassetid://117012443612361", SkyboxFt = "rbxassetid://117012443612361", SkyboxLf = "rbxassetid://117012443612361", SkyboxRt = "rbxassetid://117012443612361", SkyboxUp = "rbxassetid://117012443612361"},
-        ["Black"] = {SkyboxBk = "rbxassetid://8222365457", SkyboxDn = "rbxassetid://8222365457", SkyboxFt = "rbxassetid://8222365457", SkyboxLf = "rbxassetid://8222365457", SkyboxRt = "rbxassetid://8222365457", SkyboxUp = "rbxassetid://8222365457"},
-        ["TrollFace"] = {SkyboxBk = "rbxassetid://103891272942638", SkyboxDn = "rbxassetid://103891272942638", SkyboxFt = "rbxassetid://103891272942638", SkyboxLf = "rbxassetid://103891272942638", SkyboxRt = "rbxassetid://103891272942638", SkyboxUp = "rbxassetid://103891272942638"},
-        ["Purple"] = {SkyboxBk = "rbxassetid://6807694157", SkyboxDn = "rbxassetid://6807694157", SkyboxFt = "rbxassetid://6807694157", SkyboxLf = "rbxassetid://6807694157", SkyboxRt = "rbxassetid://6807694157", SkyboxUp = "rbxassetid://6807694157"},
-        ["Skeleton"] = {SkyboxBk = "rbxassetid://10180536577", SkyboxDn = "rbxassetid://10180536577", SkyboxFt = "rbxassetid://10180536577", SkyboxLf = "rbxassetid://10180536577", SkyboxRt = "rbxassetid://10180536577", SkyboxUp = "rbxassetid://10180536577"},
-        ["Spooky scary"] = {SkyboxBk = "rbxassetid://12075892911", SkyboxDn = "rbxassetid://12075892911", SkyboxFt = "rbxassetid://12075892911", SkyboxLf = "rbxassetid://12075892911", SkyboxRt = "rbxassetid://12075892911", SkyboxUp = "rbxassetid://12075892911"},
-        ["Night"] = {SkyboxBk = "rbxassetid://6489194051", SkyboxDn = "rbxassetid://6489194051", SkyboxFt = "rbxassetid://6489194051", SkyboxLf = "rbxassetid://6489194051", SkyboxRt = "rbxassetid://6489194051", SkyboxUp = "rbxassetid://6489194051"},
-        ["SpongeBob Sad"] = {SkyboxBk = "rbxassetid://10729455634", SkyboxDn = "rbxassetid://10729455634", SkyboxFt = "rbxassetid://10729455634", SkyboxLf = "rbxassetid://10729455634", SkyboxRt = "rbxassetid://10729455634", SkyboxUp = "rbxassetid://10729455634"},
-        ["Bikini Bottom"] = {SkyboxBk = "rbxassetid://16631601462", SkyboxDn = "rbxassetid://16631601462", SkyboxFt = "rbxassetid://16631601462", SkyboxLf = "rbxassetid://16631601462", SkyboxRt = "rbxassetid://16631601462", SkyboxUp = "rbxassetid://16631601462"}
+        ["Default"] = {SkyboxBk = "rbxassetid://401664839", SkyboxDn = "rbxassetid://401664862", SkyboxFt = "rbxassetid://401664936", SkyboxLf = "rbxassetid://401664881", SkyboxRt = "rbxassetid://401664929", SkyboxUp = "rbxassetid://401664883"}
+        -- ... если есть другие, добавь
     }
 
     -- === HIT SOUND LOGIC ===
@@ -173,7 +163,7 @@ return function(VisualTab)
     local WorldBox = VisualTab:AddRightGroupbox("World", "globe")
     local SafeZoneBox = VisualTab:AddRightGroupbox("Safe zone", "shield", {Bottom=true})
 
-    -- === CHAMS UI (минимал: только чекбокс, 1 colorpicker, 1 dropdown) ===
+    -- CHAMS UI
     local handChamsToggle = ChamsBox:AddToggle("HandChams", {
         Text = "Hand Chams",
         Default = chamsSettings.hand,
@@ -225,17 +215,26 @@ return function(VisualTab)
     local removeFogToggle = WorldBox:AddToggle("RemoveFog",{Text="Remove Fog",Default=worldVisuals.removeFog,Callback=function(val)worldVisuals.removeFog=val end})
     WorldBox:AddDropdown("SkyboxSelect",{
         Text="Skybox",
-        Values={"Default","Delta","Black","TrollFace","Purple","Skeleton","Spooky scary","Night","SpongeBob Sad","Bikini Bottom"},
+        Values={"Default"},
         Default="Default",
         Callback=function(val) worldVisuals.skybox=val; setSkybox(val) end
     })
-    WorldBox:AddToggle("BulletTrace",{Text="Bullet Trace",Default=false,Callback=function(val)traceSettings.enabled=val end}):AddColorPicker("BulletTraceColor",{Default=Color3.new(0,0.4,1),Title="Bullet Trace Color",Callback=function(val)traceSettings.color=val end})
-    WorldBox:AddDropdown("BulletTraceMode",{Values={"Neon","Lazer"},Default="Lazer",Text="Bullet Trace Mode",Callback=function(val)traceSettings.mode=val end}) -- Legit убран
-    WorldBox:AddSlider("BulletTraceLifetime",{Text="Life time",Default=0.5,Min=0,Max=20,Rounding=2,Callback=function(val)traceSettings.lifetime=val end})
-    WorldBox:AddToggle("HitSound",{Text="Hit sound",Default=false,Callback=function(val)hitSoundSettings.enabled=val; updateHitSounds() end})
-    WorldBox:AddDropdown("HitSoundType",{Values={"Rust","Skeet","Sonic","Sonic Checkpoint","Oof","Windows XP Error","Punch","Buble","byebye","cowbell"},Default="Rust",Text="Hit sound type",Callback=function(val)hitSoundSettings.soundType=val; updateHitSounds() end})
-    WorldBox:AddToggle("Log",{Text="Log",Default=false,Callback=function(val)logSettings.enabled=val; if setupLogHooks then setupLogHooks() end end})
-    WorldBox:AddDropdown("LogTypes",{Values={"Kill log","Hit log"},Multi=true,Default={"Kill log","Hit log"},Text="Log Types",Callback=function(val)logSettings.types={};for k,v in pairs(val) do logSettings.types[k]=v end end})
+    WorldBox:AddToggle("BulletTrace", {Text="Bullet Trace", Default=false, Callback=function(val)traceSettings.enabled=val end})
+        :AddColorPicker("BulletTraceColor", {Default=Color3.new(0,0.7,1), Title="Bullet Trace Color", Callback=function(val)traceSettings.color=val end})
+    WorldBox:AddDropdown("BulletTraceMode", {
+        Values={"Neon","Lazer","ForceField"},
+        Default="Lazer",
+        Text="Bullet Trace Mode",
+        Callback=function(val) traceSettings.mode=val end
+    })
+    WorldBox:AddSlider("BulletTraceLifetime", {
+        Text="Life time",
+        Default=0.5,
+        Min=0,
+        Max=20,
+        Rounding=2,
+        Callback=function(val)traceSettings.lifetime=val end
+    })
 
     -- ESP UI
     EspBox:AddToggle("espEnabled",{Text="Enabled",Default=espSettings.enabled,Callback=function(val)espSettings.enabled=val end})
@@ -274,7 +273,7 @@ return function(VisualTab)
     carToggle:AddColorPicker("objectEspCarColor",{Default=objectEspSettings.car.color,Callback=function(val)objectEspSettings.car.color=val end})
     ObjectEspBox:AddSlider("objectEspMaxDistance",{Text="Max Distance",Default=objectEspSettings.maxDistance,Min=200,Max=3000,Rounding=0,Callback=function(val)objectEspSettings.maxDistance=val end})
 
-    -- === Offscreen ESP UI ===
+    -- Offscreen ESP UI
     OffscreenEspBox:AddToggle("offscreenEnabled", {
         Text = "Enable Offscreen ESP",
         Default = offscreenSettings.enabled,
@@ -358,6 +357,7 @@ return function(VisualTab)
         Default = offscreenSettings.aicheck,
         Callback = function(val) offscreenSettings.aicheck = val end
     })
+
 ------------------------------------------------------------
 -- ЧАСТЬ 2. ЛОГИКА: Offscreen ESP (arrows, labels, очистка), No Grass, No Leaves, Clouds, Ambient, Always Day, Remove Fog, Skybox
 ------------------------------------------------------------
@@ -1006,24 +1006,25 @@ game:GetService("RunService").RenderStepped:Connect(function()
 end)
 -- конец chams, дальше идёт BULLET TRACE
 ------------------------------------------------------------
--- BULLET TRACE через Beam (3D Neon/Lazer, плавный fade-out, без багов с кусками)
+-- BULLET TRACE Beam (Neon / Lazer / ForceField, плавный fade-out, без "кусков", Arrow + Bullet)
 ------------------------------------------------------------
 local bulletTraces = {}
 local RunService = game:GetService("RunService")
 
--- Fade-out NumberSequence: исчезает от начала к концу
-local function fadeSequence(step)
-    -- step [0..1]; 0 = видно, 1 = прозрачно
-    return NumberSequence.new{
-        NumberSequenceKeypoint.new(0, step),             -- Начало: от 0 (видно) до 1 (прозрачно)
-        NumberSequenceKeypoint.new(0.7, step*0.5),       -- Середина: плавный переход
-        NumberSequenceKeypoint.new(0.95, step*0.8),      -- Почти конец: почти прозрачно
-        NumberSequenceKeypoint.new(1, 1)                 -- Конец: прозрачно
-    }
+-- Создаём плавный NumberSequence для прозрачности (fade-out)
+local function smoothFadeSequence()
+    local points = {}
+    for i = 0, 10 do
+        local k = i/10
+        local v = k < 0.95 and k*0.9 or 1
+        table.insert(points, NumberSequenceKeypoint.new(k, v))
+    end
+    table.insert(points, NumberSequenceKeypoint.new(1, 1))
+    return NumberSequence.new(points)
 end
 
-local function createBeamLaser(startPos, endPos, color, mode, width, lifetime)
-    -- Создание Attachments (не двигаем их!)
+local function createBeamTrace(startPos, endPos, color, mode, width, lifetime)
+    -- Attachments (не двигаем!)
     local partFrom = Instance.new("Part")
     partFrom.Anchored = true
     partFrom.CanCollide = false
@@ -1040,12 +1041,9 @@ local function createBeamLaser(startPos, endPos, color, mode, width, lifetime)
     partTo.Position = endPos
     partTo.Parent = workspace
 
-    local attFrom = Instance.new("Attachment")
-    attFrom.Parent = partFrom
-    local attTo = Instance.new("Attachment")
-    attTo.Parent = partTo
+    local attFrom = Instance.new("Attachment", partFrom)
+    local attTo = Instance.new("Attachment", partTo)
 
-    -- Создаём Beam(ы) с фиксированными точками, прозрачность будет анимироваться
     local beams = {}
 
     if mode == "Neon" then
@@ -1057,9 +1055,10 @@ local function createBeamLaser(startPos, endPos, color, mode, width, lifetime)
         beam.LightEmission = 1
         beam.Width0 = width
         beam.Width1 = width
-        beam.Transparency = fadeSequence(0) -- Сначала видно
+        beam.Transparency = smoothFadeSequence()
         beam.CurveSize0 = 0
         beam.CurveSize1 = 0
+        beam.Material = Enum.Material.Neon
         beam.Parent = partFrom
         table.insert(beams, beam)
     elseif mode == "Lazer" then
@@ -1071,9 +1070,10 @@ local function createBeamLaser(startPos, endPos, color, mode, width, lifetime)
         beamGlow.LightEmission = 0.7
         beamGlow.Width0 = width
         beamGlow.Width1 = width
-        beamGlow.Transparency = fadeSequence(0)
+        beamGlow.Transparency = smoothFadeSequence()
         beamGlow.CurveSize0 = 0
         beamGlow.CurveSize1 = 0
+        beamGlow.Material = Enum.Material.Neon
         beamGlow.Parent = partFrom
         table.insert(beams, beamGlow)
 
@@ -1083,40 +1083,53 @@ local function createBeamLaser(startPos, endPos, color, mode, width, lifetime)
         beamCore.FaceCamera = false
         beamCore.Color = ColorSequence.new(Color3.new(1,1,1))
         beamCore.LightEmission = 1
-        beamCore.Width0 = width * 0.45
-        beamCore.Width1 = width * 0.45
+        beamCore.Width0 = width*0.45
+        beamCore.Width1 = width*0.45
         beamCore.Transparency = NumberSequence.new(0.05)
         beamCore.CurveSize0 = 0
         beamCore.CurveSize1 = 0
+        beamCore.Material = Enum.Material.Neon
         beamCore.Parent = partFrom
         table.insert(beams, beamCore)
+    elseif mode == "ForceField" then
+        local beamFF = Instance.new("Beam")
+        beamFF.Attachment0 = attFrom
+        beamFF.Attachment1 = attTo
+        beamFF.FaceCamera = false
+        beamFF.Color = ColorSequence.new(color)
+        beamFF.LightEmission = 0.85
+        beamFF.Width0 = width
+        beamFF.Width1 = width
+        beamFF.Transparency = smoothFadeSequence()
+        beamFF.CurveSize0 = 0
+        beamFF.CurveSize1 = 0
+        beamFF.Material = Enum.Material.ForceField
+        beamFF.Parent = partFrom
+        table.insert(beams, beamFF)
     end
 
-    -- Плавный fade-out (только прозрачность, Attachments НЕ двигаем!)
+    -- Fade-out через прозрачность
     local fadeSteps = 30
     local fadeTime = lifetime or 0.5
     for i = 1, fadeSteps do
         task.delay((fadeTime/fadeSteps)*i, function()
             local t = i/fadeSteps
             for _,beam in ipairs(beams) do
-                -- Для Neon и Glow: прозрачность анимируется, для Core — просто исчезает в конце
-                if mode == "Neon" or (mode == "Lazer" and beam.Color.Keypoints[1].Value ~= Color3.new(1,1,1)) then
-                    beam.Transparency = fadeSequence(t)
+                if mode == "Neon" or mode == "ForceField" or (mode == "Lazer" and beam.Color.Keypoints[1].Value ~= Color3.new(1,1,1)) then
+                    beam.Transparency = smoothFadeSequence()
                 elseif mode == "Lazer" and beam.Color.Keypoints[1].Value == Color3.new(1,1,1) then
                     beam.Transparency = NumberSequence.new(0.05 + 0.95*t)
                 end
             end
         end)
     end
-
-    -- Удаление после исчезновения
     task.delay(fadeTime + 0.05, function()
         if partFrom then partFrom:Destroy() end
         if partTo then partTo:Destroy() end
     end)
 end
 
-local function createBulletBeam(part)
+local function createBulletTrace(part)
     local prevPos = part.Position
     local conn
     local finished = false
@@ -1128,23 +1141,23 @@ local function createBulletBeam(part)
         end
         local currPos = part.Position
         if (currPos - prevPos).Magnitude > 0.01 then
-            local width = (traceSettings.mode == "Neon") and 0.18 or 0.12
-            createBeamLaser(prevPos, currPos, traceSettings.color, traceSettings.mode, width, traceSettings.lifetime)
+            local width = 0.12
+            createBeamTrace(prevPos, currPos, traceSettings.color, traceSettings.mode, width, traceSettings.lifetime)
             prevPos = currPos
         end
     end
     conn = RunService.RenderStepped:Connect(drawTrace)
     part.Destroying:Connect(function()
         if not finished then
-            local width = (traceSettings.mode == "Neon") and 0.18 or 0.12
-            createBeamLaser(prevPos, part.Position, traceSettings.color, traceSettings.mode, width, traceSettings.lifetime)
+            local width = 0.12
+            createBeamTrace(prevPos, part.Position, traceSettings.color, traceSettings.mode, width, traceSettings.lifetime)
             finished = true
             if conn then conn:Disconnect() end
         end
     end)
 end
 
-local function createArrowBeam(part)
+local function createArrowTrace(part)
     local prevPos = part.Position
     local conn
     local finished = false
@@ -1156,16 +1169,16 @@ local function createArrowBeam(part)
         end
         local currPos = part.Position
         if (currPos - prevPos).Magnitude > 0.01 then
-            local width = (traceSettings.mode == "Neon") and 0.18 or 0.12
-            createBeamLaser(prevPos, currPos, traceSettings.color, traceSettings.mode, width, traceSettings.lifetime)
+            local width = 0.12
+            createBeamTrace(prevPos, currPos, traceSettings.color, traceSettings.mode, width, traceSettings.lifetime)
             prevPos = currPos
         end
     end
     conn = RunService.RenderStepped:Connect(drawTrace)
     part.Destroying:Connect(function()
         if not finished then
-            local width = (traceSettings.mode == "Neon") and 0.18 or 0.12
-            createBeamLaser(prevPos, part.Position, traceSettings.color, traceSettings.mode, width, traceSettings.lifetime)
+            local width = 0.12
+            createBeamTrace(prevPos, part.Position, traceSettings.color, traceSettings.mode, width, traceSettings.lifetime)
             finished = true
             if conn then conn:Disconnect() end
         end
@@ -1179,12 +1192,12 @@ local function updateBulletTraces()
         if obj.Name == "Arrow" and traceSettings.enabled then
             if not bulletTraces[obj] then
                 bulletTraces[obj] = true
-                createArrowBeam(obj)
+                createArrowTrace(obj)
             end
         elseif obj.Name == "Bullet" and traceSettings.enabled then
             if not bulletTraces[obj] then
                 bulletTraces[obj] = true
-                createBulletBeam(obj)
+                createBulletTrace(obj)
             end
         end
     end
